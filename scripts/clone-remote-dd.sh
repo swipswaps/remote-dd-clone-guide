@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
-# clone-remote-dd.sh — safe wrapper for remote dd clone with progress.
-#
-# Usage:
-#   ./clone-remote-dd.sh <remote-host> <source-dev> <local-target-dev> [user]
-#
-# Example:
-#   ./clone-remote-dd.sh 192.168.1.50 /dev/sda /dev/sdb alice
-#
-# It prints the exact command and asks for confirmation before writing.
+# clone-remote-dd.sh — safe manual wrapper for remote dd clone with progress.
+# Usage: ./clone-remote-dd.sh <remote-host> <source-dev> <local-target-dev> [user]
 set +e
 
 REMOTE="${1:-}"; SRC="${2:-}"; DST="${3:-}"; USER_AT="${4:-$USER}"
@@ -19,11 +12,12 @@ fi
 
 say() { printf '%s\n' "$*"; }
 
-say "=== remote dd clone ==="
+say "=== remote dd clone (manual) ==="
 say "remote : ${USER_AT}@${REMOTE}"
 say "source : ${SRC}"
 say "target : ${DST}"
 say ""
+
 say "--- local target details ---"
 lsblk -o NAME,SIZE,TYPE,MODEL,TRAN "$DST" 2>&1 || say "lsblk could not read $DST"
 say ""
@@ -45,9 +39,7 @@ say ""
 
 say "--- remote sudo test ---"
 if ! ssh "${USER_AT}@${REMOTE}" "sudo -n true" >/dev/null 2>&1; then
-  say "WARNING: passwordless sudo is not available on ${REMOTE}."
-  say "The pipeline will stall at the sudo prompt."
-  say "Configure NOPASSWD for dd or use a root SSH key."
+  say "WARNING: passwordless sudo not available on ${REMOTE}."
 fi
 
 say "--- source size ---"
@@ -66,7 +58,8 @@ if command -v pv >/dev/null; then
 else
   say "ssh ${USER_AT}@${REMOTE} \"sudo dd if=${SRC} bs=4M status=progress\" \\"
   say "  | sudo dd of=${DST} bs=4M status=progress conv=fsync"
-  say ""; say "pv not found; using dd status=progress only."
+  say ""
+  say "pv not found; using dd status=progress only."
 fi
 
 say ""
@@ -87,5 +80,6 @@ else
     | sudo dd of="$DST" bs=4M status=progress conv=fsync
 fi
 RC=$?
-say ""; say "dd pipeline exit code: $RC"
-say "run 'sync' and verify the first/last MiB before unplugging."
+say ""
+say "dd pipeline exit code: $RC"
+say "run sync and verify the first/last MiB before unplugging."

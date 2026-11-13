@@ -1,25 +1,42 @@
-# Pages ↔ Local Docker Bridge — Audit & Interactive Guide
+# Remote dd Clone Guide
 
 Site: https://swipswaps.github.io/remote-dd-clone-guide/
 
-Static-first GitHub Pages frontends that **probe a localhost Docker backend**
-and **degrade gracefully** when it is absent. Audited from five live repos:
+Clone a remote SATA disk to a USB drive (or a remote network destination) over SSH, with live progress.
 
-- `solar-nostoc-cad-bridge`
-- `hardened-agent-harness-explainer`
-- `ram-catalog-app`
-- `receipts-ocr-rag`
-- `receipts-ocr`
+- **Manual** — download the helper script or git clone, run copy-paste commands. No Docker.
+- **Interactive** — `docker compose up -d` starts a loopback backend; the page probes it and unlocks a panel with dry-run, compression, bandwidth limit, tolerate-read-errors, resume, verify, and optional remote destination.
 
-The page walks through the detection contract, the verbatim fallback strings
-each repo emits, and the generic `docker compose up -d` upgrade path. No
-OCR, CAD, or RAG code is included — only the bridge pattern.
+## Manual
 
-## Helper script
+    git clone https://github.com/swipswaps/remote-dd-clone-guide.git
+    cd remote-dd-clone-guide
+    bash scripts/clone-remote-dd.sh <remote-host> <source-dev> <local-target-dev> [user]
 
-`scripts/bridge-check.sh` probes a local backend and prints whether
-advanced mode is available, without depending on any specific repo.
+Or download just the script:
 
-```bash
-bash scripts/bridge-check.sh 8080
-```
+    curl -O https://swipswaps.github.io/remote-dd-clone-guide/scripts/clone-remote-dd.sh
+
+## Interactive
+
+    git clone https://github.com/swipswaps/remote-dd-clone-guide.git
+    cd remote-dd-clone-guide
+    cp .env.example .env
+    $EDITOR .env       # set BACKEND_TOKEN and ALLOWED_LOCAL_DEVICES
+    docker compose up -d
+
+Open the site. The status badge turns green. Paste the token, fill in the form, click Dry run, then Start clone.
+
+## Safety
+
+dd writes raw bytes. The backend adds defence in depth:
+
+1. Device allowlist (ALLOWED_LOCAL_DEVICES); empty means refuse all local writes.
+2. Explicit confirm — the client must send the destination path verbatim.
+3. Dry run — POST /dryrun returns the exact command without executing.
+4. Loopback bind — 127.0.0.1:8080; not reachable from the network.
+5. Input validation — host, user, and /dev/* paths are regex-gated.
+6. Unmount guard — the manual script refuses if the target is mounted.
+7. Abort kills the process group — SIGTERM, then SIGKILL after 1 s.
+
+The Docker container is privileged — it must write to host block devices. Everything above is defence in depth, not a substitute for pointing of= at the right device.

@@ -1,55 +1,42 @@
 #!/usr/bin/env bash
-# bridge-check.sh — shell-level equivalent of the Pages → localhost probe.
-#
-# Usage:
-#   ./bridge-check.sh [port] [health-path]
-#
-# Example:
-#   ./bridge-check.sh 8080 /health
-#
-# Exit code: 0 if advanced mode is available, 1 if limited.
-# Never exits 1 on missing arguments — prints usage instead.
+# bridge-check.sh — probe the local clone backend from the shell.
+# Usage: bash scripts/bridge-check.sh [port] [token]
 set +e
 
 PORT="${1:-8080}"
-PATH_="${2:-/health}"
-URL="http://localhost:${PORT}${PATH_}"
+TOKEN="${2:-}"
+if [ -z "$TOKEN" ] && [ -f .env ]; then
+  TOKEN=$(grep -E '^BACKEND_TOKEN=' .env | cut -d= -f2-)
+fi
 
+BASE="http://127.0.0.1:${PORT}"
 say() { printf '%s\n' "$*"; }
 
-say "=== pages-local bridge check ==="
-say "url: $URL"
+say "=== bridge-check ==="
+say "base:  $BASE"
+say "token: $( [ -n "$TOKEN" ] && echo 'set' || echo '(not set)' )"
 say ""
 
-# Bounded probe: curl --max-time is the shell equivalent of AbortController.
-HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$URL")
-CURL_RC=$?
+say "--- /health (no auth) ---"
+HEALTH=$(curl -sS --max-time 3 "$BASE/health" 2>&1)
+case "$HEALTH" in
+  *'"status":"ok"'*) say "OK: $HEALTH" ;;
+  *)                  say "FAIL: backend not reachable at $BASE"
+                      say "      $HEALTH"
+                      say "      start it with: docker compose up -d"
+                      exit 0 ;;
+esac
+say ""
 
-if [ "$CURL_RC" -ne 0 ]; then
-  say "advanced-mode: limited"
-  say "reason: connection refused or timed out on localhost:${PORT}"
-  say ""
-  say "verbatim fallback the page would show:"
-  say "  static mode — limited (no localhost backend — run: docker compose up -d)"
+if [ -z "$TOKEN" ]; then
+  say "skipping authed endpoints — no token."
   exit 0
 fi
 
-case "$HTTP_CODE" in
-  2*|3*)
-    say "advanced-mode: available (HTTP $HTTP_CODE)"
-    say "the Pages site will unlock advanced features on next reload."
-    exit 0
-    ;;
-  4*|5*)
-    say "advanced-mode: backend reachable but unhealthy (HTTP $HTTP_CODE)"
-    say "check the container: docker compose ps && docker compose logs --tail=50"
-    say ""
-    say "verbatim fallback the page would show:"
-    say "  Backend Offline"
-    exit 1
-    ;;
-  *)
-    say "advanced-mode: unknown response (HTTP $HTTP_CODE)"
-    exit 1
-    ;;
-esac
+say "--- /devices (auth) ---"
+curl -sS --max-time 5 -H "Authorization: Bearer $TOKEN" "$BASE/devices" 2>&1
+say ""
+
+say "--- /status (auth) ---"
+curl -sS --max-time 5 -H "Authorization: Bearer $TOKEN" "$BASE/status" 2>&1
+say ""

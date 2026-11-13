@@ -1,0 +1,27 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: remote-dd-clone-backend
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./backend:/app:ro
+      - ./docs:/app/docs:ro
+      - ./.data:/data
+      - /dev:/dev
+      - /sys/block:/sys/block:ro
+      - ${HOME}/.ssh:/root/.ssh:ro
+    environment:
+      - BACKEND_TOKEN=${BACKEND_TOKEN:?BACKEND_TOKEN must be set in .env}
+      - ALLOWED_LOCAL_DEVICES=${ALLOWED_LOCAL_DEVICES:-}
+      - JOBS_PATH=${JOBS_PATH:-/data/jobs.jsonl}
+      - LISTEN=0.0.0.0:8080
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_RAWIO
+      - MKNOD

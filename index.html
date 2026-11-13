@@ -2,12 +2,12 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>Pages ↔ Local Docker Bridge — Audit &amp; Interactive Guide</title>
+<title>Remote dd Clone — SATA to USB over SSH</title>
 <style>
 :root{--bg:#0d1117;--fg:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--card:#161b22;--border:#30363d;--warn:#d29922;--ok:#3fb950;--danger:#f85149}
 *{box-sizing:border-box}
 body{margin:0;font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
-main{max-width:900px;margin:0 auto;padding:2rem 1.25rem 4rem}
+main{max-width:960px;margin:0 auto;padding:2rem 1.25rem 4rem}
 h1{font-size:2rem;line-height:1.2;margin:0 0 .5rem}
 h2{margin-top:2.75rem;border-bottom:1px solid var(--border);padding-bottom:.4rem}
 h3{margin-top:1.75rem;color:var(--accent)}
@@ -24,310 +24,440 @@ table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.94em}
 th,td{text-align:left;padding:.55rem .65rem;border-bottom:1px solid var(--border);vertical-align:top}
 th{color:var(--muted);font-weight:600}
 ol li, ul li{margin:.35rem 0}
-
 .toolbar{display:flex;flex-wrap:wrap;gap:.5rem;margin:0 0 1.5rem}
-.btn{display:inline-block;background:var(--card);border:1px solid var(--border);border-radius:6px;
-     padding:.45rem .8rem;font:inherit;font-size:.9em;color:var(--fg);text-decoration:none;cursor:pointer}
+.btn{display:inline-block;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:.45rem .8rem;font:inherit;font-size:.9em;color:var(--fg);text-decoration:none;cursor:pointer}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600}
+.btn-primary:hover{opacity:.9;color:#000}
 .codeblock{position:relative;margin:1rem 0}
 .codebar{display:flex;justify-content:flex-end;gap:.4rem;margin-bottom:.3rem}
-.copybtn{background:var(--card);border:1px solid var(--border);border-radius:6px;
-         padding:.25rem .65rem;font:inherit;font-size:.8em;color:var(--muted);cursor:pointer}
+.copybtn{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:.25rem .65rem;font:inherit;font-size:.8em;color:var(--muted);cursor:pointer}
 .copybtn:hover{color:var(--accent);border-color:var(--accent)}
-
+#bridge-status{display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;border-radius:6px;border:1px solid var(--border);background:var(--card);margin-bottom:1.5rem}
+#bridge-indicator{font-size:1.4em;line-height:1}
+#bridge-status.online{border-color:var(--ok)}#bridge-status.online #bridge-indicator{color:var(--ok)}
+#bridge-status.offline{border-color:var(--warn)}#bridge-status.offline #bridge-indicator{color:var(--warn)}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0}
+@media (max-width:720px){.two-col{grid-template-columns:1fr}}
+.mode-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem}
+.mode-card h3{margin-top:0}
 .step{border-left:3px solid var(--border);padding-left:1rem;margin:1.5rem 0;transition:border-color .2s}
-.step.active{border-left-color:var(--accent)}
-.step.done{border-left-color:var(--ok);opacity:.85}
+.step.active{border-left-color:var(--accent)}.step.done{border-left-color:var(--ok);opacity:.85}
 .step-head{display:flex;align-items:center;gap:.6rem;cursor:pointer;user-select:none}
-.step-num{display:inline-flex;align-items:center;justify-content:center;width:1.8rem;height:1.8rem;
-          border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:.85em;font-weight:600;flex-shrink:0}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:1.8rem;height:1.8rem;border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:.85em;font-weight:600;flex-shrink:0}
 .step.done .step-num{background:var(--ok);color:#000;border-color:var(--ok)}
 .step-body{margin-top:.75rem}
 .nextbtn{background:var(--accent);border:none;border-radius:6px;padding:.45rem .9rem;font:inherit;font-size:.9em;color:#000;cursor:pointer;font-weight:600;margin-top:.75rem}
 .nextbtn:hover{opacity:.9}
 .resetbtn{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:.3rem .7rem;font:inherit;font-size:.8em;color:var(--muted);cursor:pointer;margin-left:.5rem}
 .resetbtn:hover{color:var(--accent)}
-
-.previewbtn{background:var(--card);border:1px solid var(--border);border-radius:6px;
-  padding:.25rem .65rem;font:inherit;font-size:.8em;color:var(--muted);cursor:pointer}
+.previewbtn{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:.25rem .65rem;font:inherit;font-size:.8em;color:var(--muted);cursor:pointer}
 .previewbtn:hover{color:var(--accent);border-color:var(--accent)}
-
+.dlbtn{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:.25rem .65rem;font:inherit;font-size:.8em;color:var(--muted);text-decoration:none}
+.dlbtn:hover{color:var(--accent);border-color:var(--accent)}
+td.actions{white-space:nowrap}
 .modal{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center}
 .modal[hidden]{display:none}
 .modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.68)}
-.modal-body{position:relative;background:var(--card);border:1px solid var(--border);border-radius:10px;
-  width:min(920px,94vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.55)}
-.modal-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;
-  padding:.7rem 1rem;border-bottom:1px solid var(--border);flex-wrap:wrap}
-.modal-title{font-weight:600;color:var(--accent);font-family:ui-monospace,monospace;
-  font-size:.92em;word-break:break-all;flex:1 1 auto}
+.modal-body{position:relative;background:var(--card);border:1px solid var(--border);border-radius:10px;width:min(920px,94vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.55)}
+.modal-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.7rem 1rem;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.modal-title{font-weight:600;color:var(--accent);font-family:ui-monospace,monospace;font-size:.92em;word-break:break-all;flex:1 1 auto}
 .modal-actions{display:flex;gap:.4rem;flex-shrink:0}
-.closebtn{background:var(--card);border:1px solid var(--border);border-radius:6px;
-  padding:.25rem .7rem;font:inherit;font-size:1.1em;line-height:1;color:var(--muted);cursor:pointer}
+.closebtn{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:.25rem .7rem;font:inherit;font-size:1.1em;line-height:1;color:var(--muted);cursor:pointer}
 .closebtn:hover{color:var(--accent);border-color:var(--accent)}
 #modal-pre{flex:1;overflow:auto;border:none;border-radius:0 0 10px 10px;min-height:0}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem;margin:1rem 0}
+.panel label{display:block;margin:.5rem 0 .2rem;font-size:.9em;color:var(--muted)}
+.panel input,.panel select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.5rem;font:inherit;font-size:.95em;color:var(--fg)}
+.panel input:focus,.panel select:focus{outline:none;border-color:var(--accent)}
+.panel .row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media (max-width:720px){.panel .row{grid-template-columns:1fr}}
+.panel details{margin-top:1rem;border-top:1px solid var(--border);padding-top:.5rem}
+.panel summary{cursor:pointer;font-weight:600;color:var(--accent);font-size:.95em}
+.panel .adv{padding:.75rem 0 .25rem}
+.progress{height:1.2rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin:1rem 0}
+.progress-bar{height:100%;background:var(--accent);width:0%;transition:width .3s}
+.progress-text{font-family:ui-monospace,monospace;font-size:.85em;color:var(--muted)}
 </style></head><body><main>
 
 <div class="toolbar">
   <a id="dl-zip" class="btn" href="#" download>Download repo .zip</a>
-  <a class="btn" href="#steps">Start the walkthrough ↓</a>
-  <button class="previewbtn" data-script="bridge-check.sh">Preview bridge-check.sh</button>
-  <a class="btn" href="scripts/bridge-check.sh" download>Download bridge-check.sh</a>
+  <a class="btn" href="#manual">Manual walkthrough</a>
+  <a class="btn" href="#interactive">Interactive (Docker)</a>
+  <button class="previewbtn" data-script="clone-remote-dd.sh">Preview helper script</button>
+  <a class="btn" href="scripts/clone-remote-dd.sh" download>Download helper script</a>
 </div>
 
-<h1>Pages ↔ Local Docker Bridge</h1>
+<h1>Remote <code>dd</code> Clone: SATA to USB over SSH</h1>
+
+<div id="bridge-status">
+  <span id="bridge-indicator">●</span>
+  <span id="bridge-text">Probing local Docker backend…</span>
+</div>
 
 <p class="lead">
-Five of your repos use the same architecture: a <strong>static GitHub Pages
-frontend</strong> that <strong>probes a localhost Docker backend</strong> and
-<strong>degrades gracefully</strong> when the backend is absent. This page is
-the audit of that pattern — the detection contract, the verbatim fallback
-strings each repo emits, and the generic <code>docker compose up -d</code>
-upgrade path. It contains <strong>no OCR, CAD, or RAG code</strong>; only the
-bridge.
+Clone a <strong>running SATA disk</strong> from a remote host to a
+<strong>USB drive</strong> on this machine — or to a destination on another
+host — over SSH, with live progress. Two paths, same outcome: a downloadable
+script you can run by hand, or an interactive panel that unlocks when the local
+Docker backend is running.
 </p>
 
-<div class="card">
-<p><strong>The one-sentence contract:</strong> the page loads with zero
-backend, prints a verbatim reason why advanced features are unavailable, and
-unlocks them on the next reload once <code>docker compose up -d</code> is
-running locally.</p>
+<div class="card danger">
+<p><strong>Stop.</strong> <code>dd</code> writes raw bytes. If you point
+<code>of=</code> at the wrong device, that device's data is gone. Every command
+below has a verification step before any write. The backend refuses unlisted
+destinations and requires you to type the destination path verbatim.</p>
 </div>
 
-<h2>Audit results</h2>
+<h2>What you will need</h2>
 <table>
-<tr><th>Repo</th><th>Pages frontend</th><th>Local backend</th><th>Verbatim detection / fallback</th></tr>
-<tr>
-<td><code>solar-nostoc-cad-bridge</code></td>
-<td>Static <code>index.html</code> + <code>src/</code>; <code>Dockerfile.frontend</code>/<code>.backend</code> + <code>docker-compose.yml</code>[reference:5]</td>
-<td>CFD bridge on localhost</td>
-<td class="muted">— (backend is optional; no visible fallback banner captured)</td>
-</tr>
-<tr>
-<td><code>hardened-agent-harness-explainer</code></td>
-<td><code>public/</code> + <code>server/</code>; <code>docker compose up -d</code> referenced on the page[reference:6]</td>
-<td>Express server on localhost</td>
-<td><code>static mode — limited (no localhost backend — run: docker compose up -d)</code></td>
-</tr>
-<tr>
-<td><code>ram-catalog-app</code></td>
-<td><code>public/</code> + <code>backend/</code>; host port moved to <code>8080</code>[reference:7]</td>
-<td>Backend on <code>localhost:8080</code></td>
-<td class="muted">— (backend unlocks GLB export / WebGL; no fallback string captured)</td>
-</tr>
-<tr>
-<td><code>receipts-ocr-rag</code></td>
-<td><code>frontend/</code> + <code>backend/</code>; page shows <strong>Backend Offline</strong>[reference:8]</td>
-<td>RAG backend on localhost</td>
-<td><code>Backend Offline</code> · <code>Entries: 0</code> · <code>Code Blocks: 0</code> · <code>Errors: 0</code></td>
-</tr>
-<tr>
-<td><code>receipts-ocr</code></td>
-<td>Root <code>index.html</code>; explicit Docker probe[reference:9]</td>
-<td>PaddleOCR on localhost</td>
-<td><code>Checking Docker connection...</code> → <code>Docker backend unavailable, using Tesseract.js fallback</code></td>
-</tr>
+<tr><th>Item</th><th>Why</th></tr>
+<tr><td>SSH access to the source host, with passwordless <code>sudo</code></td><td><code>dd</code> reads the source disk as root.</td></tr>
+<tr><td>The USB drive attached to this machine (or a second host)</td><td>The destination. Must be at least the source size.</td></tr>
+<tr><td>Optional: <code>pv</code>, <code>pigz</code>, <code>zstd</code>, <code>lz4</code></td><td>Progress bar, compression, bandwidth limit.</td></tr>
+<tr><td>Optional: Docker + Docker Compose</td><td>Unlocks the interactive panel with advanced options.</td></tr>
 </table>
 
-<h2 id="steps">Interactive walkthrough</h2>
-<p class="muted">Click a step header to expand it. Use <em>Mark done &amp; next</em> to advance.</p>
-
-<div id="steps-container">
+<h2 id="manual">Manual walkthrough (no Docker)</h2>
+<p>Same outcome as the interactive path, done by hand.</p>
 
 <div class="step" data-step="1">
-  <div class="step-head" onclick="toggleStep(this)">
-    <span class="step-num">1</span>
-    <strong>Recognise the static-first contract</strong>
-  </div>
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">1</span><strong>Identify the source disk on the remote host</strong></div>
   <div class="step-body" hidden>
-    <p>The Pages site is <strong>not</strong> a proxy to a server. It is a
-    complete UI shell that runs entirely in the browser. Every advanced
-    feature is behind a <strong>capability check</strong>, not a hard
-    dependency.</p>
-    <p>Two consequences:</p>
-    <ul>
-    <li>The site is fully usable (with reduced features) with no Docker.</li>
-    <li>Running Docker is an <strong>upgrade</strong>, never a prerequisite.</li>
-    </ul>
-    <p>The audit confirmed this in all five repos: each ships a static frontend
-    and a <code>Dockerfile.backend</code> (or <code>server/</code>) that is
-    <strong>optional at load time</strong>.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>ssh user@source-host
+lsblk -o NAME,SIZE,TYPE,MODEL,TRAN
+sudo fdisk -l</code></pre></div>
+    <p>Confirm the device name (e.g. <code>/dev/sda</code>). Check that
+    <code>TRAN</code> is <code>sata</code>. Write it down.</p>
     <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
     <button class="resetbtn" onclick="resetAll()">Reset</button>
   </div>
 </div>
 
 <div class="step" data-step="2">
-  <div class="step-head" onclick="toggleStep(this)">
-    <span class="step-num">2</span>
-    <strong>The probe: how the frontend detects the backend</strong>
-  </div>
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">2</span><strong>Identify the USB disk locally</strong></div>
   <div class="step-body" hidden>
-    <p>On load, the frontend issues a short-timeout <code>fetch()</code> to a
-    known localhost port. The port varies by repo — <code>8080</code> in
-    <code>ram-catalog-app</code>[reference:10], another port elsewhere — so the
-    probe must be configured per repo, not hard-coded globally.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>// Generic probe — adapted per repo's backend port.
-async function probeBackend(port = 8080, timeoutMs = 1200) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(`http://localhost:${port}/health`, {
-      signal: ctrl.signal,
-      cache: "no-store",
-    });
-    return res.ok;
-  } catch (_) {
-    return false;
-  } finally {
-    clearTimeout(timer);
-  }
-}</code></pre></div>
-    <p><strong>Timeout matters.</strong> A 1.2 s cap prevents the page from
-    hanging when nothing is listening. <code>cache: "no-store"</code> ensures
-    the probe reflects the current Docker state, not a cached “offline”
-    response.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>lsblk -o NAME,SIZE,TYPE,MODEL,TRAN
+sudo fdisk -l</code></pre></div>
+    <p>Confirm the target device name (e.g. <code>/dev/sdb</code>).
+    Triple-check it. Target size must be at least the source size.</p>
     <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
     <button class="resetbtn" onclick="resetAll()">Reset</button>
   </div>
 </div>
 
 <div class="step" data-step="3">
-  <div class="step-head" onclick="toggleStep(this)">
-    <span class="step-num">3</span>
-    <strong>The fallback: print the verbatim reason</strong>
-  </div>
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">3</span><strong>Unmount the target</strong></div>
   <div class="step-body" hidden>
-    <p>When the probe fails, the UI must not silently hide features. It must
-    print the <strong>exact</strong> string the repo ships, so the user knows
-    what is missing and how to fix it. The audit captured three distinct
-    fallback styles:</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>// hardened-agent-harness-explainer
-"static mode — limited (no localhost backend — run: docker compose up -d)"
-
-// receipts-ocr-rag
-"Backend Offline"   // plus: Entries: 0 · Code Blocks: 0 · Errors: 0
-
-// receipts-ocr
-"Checking Docker connection..."
-"Docker backend unavailable, using Tesseract.js fallback"</code></pre></div>
-    <p>These are not generic error toasts. They are <strong>contract
-    statements</strong> that tell the user exactly which command to run
-    (<code>docker compose up -d</code>) or which fallback engine is active
-    (<code>Tesseract.js</code>).</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>lsblk /dev/sdb
+for p in /dev/sdb*; do
+  [ -e "$p" ] || continue
+  if findmnt -n "$p" >/dev/null; then
+    sudo umount "$p" || echo "umount failed for $p — check: lsof $p"
+  fi
+done
+if mount | grep -q ' /dev/sdb'; then
+  echo "STILL MOUNTED — do not proceed"
+else
+  echo "nothing mounted from sdb"
+fi</code></pre></div>
+    <p>If <code>umount</code> prints <code>target is busy</code>, the loop echoes
+    the exact <code>lsof</code> command. Stop the holder before continuing.</p>
     <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
     <button class="resetbtn" onclick="resetAll()">Reset</button>
   </div>
 </div>
 
 <div class="step" data-step="4">
-  <div class="step-head" onclick="toggleStep(this)">
-    <span class="step-num">4</span>
-    <strong>The upgrade: <code>docker compose up -d</code></strong>
-  </div>
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">4</span><strong>Dry run: SSH and sudo work</strong></div>
   <div class="step-body" hidden>
-    <p>The advanced features live in the local Docker instance. The generic
-    upgrade path is the same across the audited repos:</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>git clone https://github.com/swipswaps/&lt;repo&gt;.git
-cd &lt;repo&gt;
-docker compose up -d
-
-# Then reload the Pages site — the probe should now succeed.</code></pre></div>
-    <p>Ports must match the probe. If <code>docker compose</code> binds the
-    backend to <code>8080</code>, the frontend must probe <code>8080</code>.
-    <code>ram-catalog-app</code> already moved its host port to <code>8080</code>
-    specifically to avoid TIME_WAIT collisions[reference:11].</p>
-    <div class="card warn">
-    <p><strong>Firewall:</strong> some repos include <code>start.sh</code> /
-    <code>stop.sh</code> to manage firewall rules and PID tracking. If the
-    probe fails while Docker is running, check that the host port is reachable
-    from the browser (<code>curl http://localhost:8080/health</code>).</p>
-    </div>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>ssh user@source-host "sudo -n true && echo SUDO_OK"
+ssh user@source-host "sudo blockdev --getsize64 /dev/sda"</code></pre></div>
+    <p>The second command prints the source size in bytes. Keep it — it feeds
+    <code>pv -s</code> later.</p>
     <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
     <button class="resetbtn" onclick="resetAll()">Reset</button>
   </div>
 </div>
 
 <div class="step" data-step="5">
-  <div class="step-head" onclick="toggleStep(this)">
-    <span class="step-num">5</span>
-    <strong>Verify detection without the browser</strong>
-  </div>
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">5</span><strong>The clone</strong></div>
   <div class="step-body" hidden>
-    <p>Use the helper script to reproduce the browser probe from the shell.
-    It takes the backend port as an argument and prints the verdict in the same
-    terms the page uses.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>bash scripts/bridge-check.sh 8080
-# advanced-mode: available
-# or:
-# advanced-mode: limited (connection refused on localhost:8080)</code></pre></div>
-    <p>The script also prints the <strong>verbatim fallback string</strong> the
-    page would show, so you can confirm the contract end-to-end.</p>
+    <h3>A. dd built-in progress</h3>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>ssh user@source-host "sudo dd if=/dev/sda bs=4M status=progress" \
+  | sudo dd of=/dev/sdb bs=4M status=progress conv=fsync</code></pre></div>
+    <h3>B. pv bar with ETA</h3>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>SRC_BYTES=$(ssh user@source-host "sudo blockdev --getsize64 /dev/sda")
+ssh user@source-host "sudo dd if=/dev/sda bs=4M" \
+  | pv -s "$SRC_BYTES" -b -t -r -e \
+  | sudo dd of=/dev/sdb bs=4M conv=fsync</code></pre></div>
+    <h3>C. Compressed stream</h3>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>SRC_BYTES=$(ssh user@source-host "sudo blockdev --getsize64 /dev/sda")
+ssh user@source-host "sudo dd if=/dev/sda bs=4M | pigz -1" \
+  | pv -s "$SRC_BYTES" -b -t -r -e \
+  | pigz -d \
+  | sudo dd of=/dev/sdb bs=4M conv=fsync</code></pre></div>
+    <p class="muted"><code>conv=fsync</code> flushes to stable storage before
+    <code>dd</code> returns.</p>
     <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
     <button class="resetbtn" onclick="resetAll()">Reset</button>
   </div>
 </div>
 
 <div class="step" data-step="6">
-  <div class="step-head" onclick="toggleStep(this)">
-    <span class="step-num">6</span>
-    <strong>What “advanced features” means (audit-derived)</strong>
-  </div>
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">6</span><strong>Monitor from another terminal</strong></div>
   <div class="step-body" hidden>
-    <p>The audit did not need to read the OCR/CAD/RAG code to establish the
-    contract. The <strong>observable</strong> advanced features are:</p>
-    <ul>
-    <li><strong>Higher-accuracy engines</strong> — PaddleOCR instead of
-    Tesseract.js (<code>receipts-ocr</code>).</li>
-    <li><strong>Server-side export formats</strong> — GLB, OpenFOAM, XLSX
-    (<code>ram-catalog-app</code>, <code>solar-nostoc-cad-bridge</code>).</li>
-    <li><strong>RAG retrieval</strong> — code blocks, error patterns, success
-    rates (<code>receipts-ocr-rag</code>).</li>
-    <li><strong>Streaming logs and health checks</strong> — real backend logs
-    rather than fake spinners (<code>receipts-ocr</code>).</li>
-    </ul>
-    <p>Each of these is unlocked by the same probe-and-upgrade contract. The
-    code behind them is repo-specific and out of scope for this page.</p>
-    <div class="card ok">
-    <p><strong>Done.</strong> You now have the audit, the detection contract,
-    the verbatim fallback strings, and a shell-level verifier. The pattern is
-    identical across all five repos.</p>
-    </div>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>pgrep -a dd
+sudo kill -USR1 <PID>
+iostat -dx 2 /dev/sdb</code></pre></div>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="7">
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">7</span><strong>Verify the clone</strong></div>
+  <div class="step-body" hidden>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>ssh user@source-host "sudo dd if=/dev/sda bs=1M count=1" | sha256sum
+sudo dd if=/dev/sdb bs=1M count=1 | sha256sum
+
+SRC_BYTES=$(ssh user@source-host "sudo blockdev --getsize64 /dev/sda")
+SKIP=$(( (SRC_BYTES / 1048576) - 1 ))
+ssh user@source-host "sudo dd if=/dev/sda bs=1M skip=$SKIP count=1" | sha256sum
+sudo dd if=/dev/sdb bs=1M skip=$SKIP count=1 | sha256sum</code></pre></div>
+    <p>Full hash is the only definitive check.</p>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="8">
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">8</span><strong>Sync and power off</strong></div>
+  <div class="step-body" hidden>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>sync
+sudo udisksctl power-off -b /dev/sdb</code></pre></div>
+    <p>If the source was bootable, boot the target machine from the USB disk to
+    confirm.</p>
     <button class="resetbtn" onclick="resetAll()">Reset walkthrough</button>
   </div>
 </div>
 
+<h2 id="interactive">Interactive walkthrough (Docker)</h2>
+
+<p>The panel below unlocks advanced operations when the local Docker backend is
+running: dry-run, compression, bandwidth limit, tolerate-read-errors, resume
+from offset, verify-after-clone, and optional remote destination.</p>
+
+<div class="panel" id="interactive-panel">
+  <p class="muted" id="panel-hint">Probing backend…</p>
+
+  <div id="panel-auth" hidden>
+    <p class="muted" style="margin-top:0">Backend is online. Paste the
+    <code>BACKEND_TOKEN</code> from <code>.env</code> to continue.</p>
+    <div class="row">
+      <div><label for="token-input">Token</label>
+        <input id="token-input" type="password" placeholder="32-hex token" autocomplete="off"></div>
+      <div><label>&nbsp;</label>
+        <button class="btn btn-primary" id="token-save" style="width:100%">Authenticate</button></div>
+    </div>
+    <p class="progress-text" id="auth-error" style="color:var(--danger);margin-top:.4rem"></p>
+  </div>
+
+  <div id="panel-body" hidden>
+    <div class="row">
+      <div><label for="target-host">Remote host (source)</label>
+        <input id="target-host" placeholder="192.168.1.50 or source.lan"></div>
+      <div><label for="target-user">SSH user</label>
+        <input id="target-user" placeholder="root" value="root"></div>
+    </div>
+    <div class="row">
+      <div><label for="target-dev">Source device (remote)</label>
+        <input id="target-dev" placeholder="/dev/sda"></div>
+      <div><label for="dst-dev">Destination (allowlisted local device)</label>
+        <select id="dst-dev"><option value="">- loading -</option></select></div>
+    </div>
+
+    <details>
+      <summary>Advanced operations</summary>
+      <div class="adv">
+        <div class="row">
+          <div><label for="opt-compress">Compression (requires tool on source host)</label>
+            <select id="opt-compress">
+              <option value="none">none (raw stream)</option>
+              <option value="gzip">gzip -1</option>
+              <option value="pigz">pigz -1 (parallel)</option>
+              <option value="zstd">zstd -3</option>
+              <option value="lz4">lz4 -1</option>
+            </select></div>
+          <div><label for="opt-bw">Bandwidth limit (KB/s, 0 = unlimited)</label>
+            <input id="opt-bw" type="number" min="0" step="100" value="0"></div>
+        </div>
+        <div class="row">
+          <div><label for="opt-resume">Resume from byte offset (0 = start fresh)</label>
+            <input id="opt-resume" type="number" min="0" step="1048576" value="0"></div>
+          <div><label for="opt-verify">Verify after clone</label>
+            <select id="opt-verify">
+              <option value="none">none (fastest)</option>
+              <option value="spot" selected>spot (first + last 1 MiB)</option>
+              <option value="full">full (sha256 of both devices)</option>
+            </select></div>
+        </div>
+        <div class="row">
+          <div style="grid-column:1/-1">
+            <label><input id="opt-tolerate" type="checkbox" style="width:auto;margin-right:.5rem">
+            Tolerate read errors (conv=noerror,sync)</label>
+          </div>
+        </div>
+        <div class="row">
+          <div><label for="dst-host">Remote destination host (leave blank for local)</label>
+            <input id="dst-host" placeholder="empty = local USB"></div>
+          <div><label for="dst-user">Remote SSH user</label>
+            <input id="dst-user" placeholder="root" value="root"></div>
+        </div>
+        <p class="muted" style="font-size:.85em;margin-top:.5rem">
+          Remote destinations bypass the local device allowlist. You will be
+          asked to type user@host:device verbatim as an extra confirmation step.
+        </p>
+      </div>
+    </details>
+
+    <p class="progress-text" id="probe-status" style="margin-top:1rem"></p>
+
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem">
+      <button class="btn" id="btn-dryrun">Dry run</button>
+      <button class="btn btn-primary" id="btn-clone" disabled>Start clone</button>
+      <button class="btn" id="btn-abort" disabled>Abort</button>
+    </div>
+
+    <div class="progress" id="progress-wrap" hidden><div class="progress-bar" id="progress-bar"></div></div>
+    <p class="progress-text" id="progress-text"></p>
+    <pre id="dryrun-output" hidden style="margin-top:1rem"><code></code></pre>
+    <pre id="verify-output" hidden style="margin-top:1rem"><code></code></pre>
+  </div>
 </div>
 
-<h2>Command reference</h2>
+<div class="step" data-step="1">
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">1</span><strong>Clone the repo and configure .env</strong></div>
+  <div class="step-body" hidden>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>git clone https://github.com/OWNER/remote-dd-clone-guide.git
+cd remote-dd-clone-guide
+cp .env.example .env
+$EDITOR .env</code></pre></div>
+    <p>Generate a token with <code>openssl rand -hex 32</code>. The allowlist
+    must include the exact USB device path (e.g. <code>/dev/sdb</code>).</p>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="2">
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">2</span><strong>Start the backend</strong></div>
+  <div class="step-body" hidden>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>docker compose up -d
+docker compose logs -f backend</code></pre></div>
+    <p>Wait for <code>backend 1.0.0 listening on 0.0.0.0:8080</code> and the
+    allowlist echoed. Reload this page — the badge turns green.</p>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="3">
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">3</span><strong>Authenticate and dry-run</strong></div>
+  <div class="step-body" hidden>
+    <p>Paste the token. Fill in the form, open Advanced operations if you want
+    them, then click Dry run. The exact command the backend would execute
+    appears — no bytes are written.</p>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="4">
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">4</span><strong>Clone</strong></div>
+  <div class="step-body" hidden>
+    <p>Click Start clone. For a local destination you type the device path to
+    confirm; for a remote destination you type
+    <code>user@host:device</code>. Progress is tracked via
+    <code>/sys/block/&lt;dev&gt;/stat</code>. Abort kills the process group.</p>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="5">
+  <div class="step-head" onclick="toggleStep(this)"><span class="step-num">5</span><strong>Verify and power off</strong></div>
+  <div class="step-body" hidden>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>sync
+sudo udisksctl power-off -b /dev/sdb</code></pre></div>
+    <p>If you selected spot or full verify, the backend prints the comparison
+    when the clone finishes. Power off cleanly before unplugging.</p>
+    <button class="resetbtn" onclick="resetAll()">Reset walkthrough</button>
+  </div>
+</div>
+
+<h2>Safety guardrails</h2>
+<div class="card warn">
+<ol>
+  <li><strong>Allowlist.</strong> The backend refuses any local destination not in <code>ALLOWED_LOCAL_DEVICES</code>. Empty by default.</li>
+  <li><strong>Typed confirmation.</strong> Local: type the device path. Remote: type <code>user@host:device</code>.</li>
+  <li><strong>Dry run.</strong> <code>POST /dryrun</code> returns the exact command without executing.</li>
+  <li><strong>Loopback bind.</strong> <code>127.0.0.1:8080</code>; not reachable from the network.</li>
+  <li><strong>Input validation.</strong> Host, user, and <code>/dev/*</code> paths regex-gated.</li>
+  <li><strong>Unmount guard.</strong> Manual script refuses if target is mounted. Backend refuses if destination reports an active mount.</li>
+  <li><strong>Abort kills the process group.</strong> SIGTERM, then SIGKILL after 1 s.</li>
+</ol>
+</div>
+<div class="card danger">
+<p><strong>The Docker container runs privileged.</strong> It writes to host block
+devices. Everything above is defence in depth, not a substitute for pointing
+<code>of=</code> at the right device.</p>
+</div>
+
+<h2>Scripts</h2>
 <table>
-<tr><th>Command</th><th>What it does</th></tr>
-<tr><td><code>docker compose up -d</code></td><td>Starts the repo's local backend; the Pages probe succeeds on next reload.</td></tr>
-<tr><td><code>curl http://localhost:8080/health</code></td><td>Shell-level equivalent of the browser probe.</td></tr>
-<tr><td><code>bash scripts/bridge-check.sh 8080</code></td><td>Prints the verdict plus the verbatim fallback string.</td></tr>
-<tr><td><code>docker compose down</code></td><td>Stops the backend; the page falls back on next reload.</td></tr>
+<tr><th>Script</th><th>What it does</th><th></th></tr>
+<tr>
+<td><code>clone-remote-dd.sh</code></td>
+<td>Manual wrapper. Prints the command, asks for typed confirmation, runs it.</td>
+<td class="actions"><button class="previewbtn" data-script="clone-remote-dd.sh" title="Preview inline">Preview</button><a class="dlbtn" href="scripts/clone-remote-dd.sh" download>Download</a></td>
+</tr>
+<tr>
+<td><code>bridge-check.sh</code></td>
+<td>Shell-level probe of the backend; prints health + devices.</td>
+<td class="actions"><button class="previewbtn" data-script="bridge-check.sh" title="Preview inline">Preview</button><a class="dlbtn" href="scripts/bridge-check.sh" download>Download</a></td>
+</tr>
 </table>
 
-<h2>Safety notes</h2>
-<ol>
-<li><strong>No code leakage.</strong> This page documents the bridge contract only; it contains no OCR, CAD, or RAG implementation.</li>
-<li><strong>Ports are explicit.</strong> Never assume <code>8080</code> globally — each repo chooses its own port and the probe must match.</li>
-<li><strong>Probe timeout is bounded.</strong> A hung <code>fetch</code> without <code>AbortController</code> would freeze the page; every probe must cap itself.</li>
-<li><strong>Fallback strings are contract.</strong> Do not replace them with generic toasts — they tell the user exactly what to run.</li>
-</ol>
+<h2><code>dd</code> command reference</h2>
+<table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>ssh user@host "sudo dd if=/dev/sda bs=4M status=progress"</code></td><td>Reads the source over SSH, prints progress.</td></tr>
+<tr><td><code>sudo dd of=/dev/sdb bs=4M conv=fsync status=progress</code></td><td>Writes stdin, flushes to stable storage before returning.</td></tr>
+<tr><td><code>pv -s SIZE -b -t -r -e</code></td><td>Progress bar with bytes, elapsed, rate, ETA.</td></tr>
+<tr><td><code>dd conv=noerror,sync</code></td><td>On read error, continue and pad the bad block with zeros.</td></tr>
+<tr><td><code>dd skip=N seek=N</code></td><td>Skip N blocks on source, seek N blocks on destination.</td></tr>
+<tr><td><code>sudo kill -USR1 PID</code></td><td>Ask a running dd for stats without stopping.</td></tr>
+<tr><td><code>blockdev --getsize64 /dev/sda</code></td><td>Exact size in bytes; feeds pv -s.</td></tr>
+<tr><td><code>pigz -1</code> / <code>pigz -d</code></td><td>Parallel gzip compress / decompress. zstd and lz4 also supported.</td></tr>
+</table>
 
 <h2>References</h2>
 <ul>
-<li><a href="https://swipswaps.github.io/hardened-agent-harness-explainer/">hardened-agent-harness-explainer (live)</a> — static-mode banner[reference:12]</li>
-<li><a href="https://swipswaps.github.io/receipts-ocr/">receipts-ocr (live)</a> — Docker probe and Tesseract.js fallback[reference:13]</li>
-<li><a href="https://swipswaps.github.io/receipts-ocr-rag/">receipts-ocr-rag (live)</a> — Backend Offline banner[reference:14]</li>
-<li><a href="https://github.com/swipswaps/ram-catalog-app">ram-catalog-app</a> — port 8080 move[reference:15]</li>
-<li><a href="https://github.com/swipswaps/solar-nostoc-cad-bridge">solar-nostoc-cad-bridge</a> — compose + Dockerfiles[reference:16]</li>
+<li><a href="https://www.gnu.org/software/coreutils/manual/html_node/dd-invocation.html">GNU coreutils: dd invocation</a></li>
+<li><a href="https://linux.die.net/man/1/pv">pv(1) manual</a></li>
+<li><a href="https://docs.docker.com/compose/">Docker Compose</a></li>
+<li><a href="https://man7.org/linux/man-pages/man8/lsblk.8.html">lsblk(8)</a></li>
+<li><a href="https://man7.org/linux/man-pages/man8/blockdev.8.html">blockdev(8)</a></li>
 </ul>
 
 <p class="muted">
-This page is the explainer half. <code>scripts/bridge-check.sh</code> is the
-executable half. No hostnames, IP addresses, or credentials are included.
+This page is the dd clone explainer. The scripts and backend under
+<code>scripts/</code> and <code>backend/</code> are the executable half.
+Background on how this repo arrived at the bridge pattern is in
+<a href="docs/HOW-WE-GOT-HERE.md">docs/HOW-WE-GOT-HERE.md</a>.
 </p>
 
 </main>
@@ -355,7 +485,7 @@ executable half. No hostnames, IP addresses, or credentials are included.
     var host = location.hostname || "";
     var seg = (location.pathname || "/").split("/");
     var user = host.indexOf("github.io") !== -1 ? host.split(".")[0] : "swipswaps";
-    var repo = seg.length > 1 && seg[1] ? seg[1] : "pages-local-bridge-audit";
+    var repo = seg.length > 1 && seg[1] ? seg[1] : "remote-dd-clone-guide";
     zip.href = "https://github.com/" + user + "/" + repo + "/archive/refs/heads/main.zip";
   }
 
@@ -395,12 +525,7 @@ executable half. No hostnames, IP addresses, or credentials are included.
       .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
       .then(function (text) { modalCode.textContent = text; })
       .catch(function (err) {
-        modalCode.textContent =
-          "failed to load scripts/" + name + "\n\n" + err.message +
-          "\n\nIf you are viewing this offline (file://), fetch() is disabled " +
-          "by the browser. Serve the directory over HTTP, e.g.:\n" +
-          "  python3 -m http.server 8000\n" +
-          "then open http://localhost:8000/";
+        modalCode.textContent = "failed to load scripts/" + name + "\n\n" + err.message;
       });
   }
   document.querySelectorAll(".previewbtn").forEach(function (btn) {
@@ -463,6 +588,219 @@ executable half. No hostnames, IP addresses, or credentials are included.
     }
   };
   resetAll();
+
+  var BASE = "http://127.0.0.1:8080";
+  var TOKEN = sessionStorage.getItem("dd_backend_token") || "";
+  var jobPoll = null;
+
+  var statusEl   = document.getElementById("bridge-status");
+  var indicator  = document.getElementById("bridge-indicator");
+  var statusText = document.getElementById("bridge-text");
+  var panelHint  = document.getElementById("panel-hint");
+  var panelAuth  = document.getElementById("panel-auth");
+  var panelBody  = document.getElementById("panel-body");
+  var authError  = document.getElementById("auth-error");
+  var tokenInput = document.getElementById("token-input");
+  var tokenSave  = document.getElementById("token-save");
+  var dstSelect  = document.getElementById("dst-dev");
+  var probeEl    = document.getElementById("probe-status");
+  var btnDryrun  = document.getElementById("btn-dryrun");
+  var btnClone   = document.getElementById("btn-clone");
+  var btnAbort   = document.getElementById("btn-abort");
+  var progressWrap = document.getElementById("progress-wrap");
+  var progressBar  = document.getElementById("progress-bar");
+  var progressText = document.getElementById("progress-text");
+  var dryrunOut    = document.getElementById("dryrun-output");
+  var verifyOut    = document.getElementById("verify-output");
+
+  function setStatus(cls, text) {
+    statusEl.className = cls;
+    indicator.textContent = "●";
+    statusText.textContent = text;
+  }
+
+  function api(path, opts) {
+    opts = opts || {};
+    opts.headers = opts.headers || {};
+    if (TOKEN) opts.headers["Authorization"] = "Bearer " + TOKEN;
+    if (opts.body && typeof opts.body === "object") {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(opts.body);
+    }
+    return fetch(BASE + path, opts);
+  }
+
+  function probe() {
+    var ac = new AbortController();
+    var t = setTimeout(function () { ac.abort(); }, 2500);
+    fetch(BASE + "/health", { signal: ac.signal })
+      .then(function (r) {
+        clearTimeout(t);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        setStatus("online", "Backend online (v" + (data.version || "?") + "). Advanced operations available.");
+        panelHint.hidden = true;
+        if (TOKEN) { panelAuth.hidden = true; panelBody.hidden = false; loadDevices(); }
+        else { panelAuth.hidden = false; panelBody.hidden = true; }
+      })
+      .catch(function () {
+        clearTimeout(t);
+        setStatus("offline", "Backend offline. Manual walkthrough is fully usable; advanced operations require docker compose up -d.");
+        panelAuth.hidden = true; panelBody.hidden = true;
+        panelHint.hidden = false;
+        panelHint.textContent = "Start the backend with docker compose up -d, then reload this page.";
+      });
+  }
+
+  function formatBytes(n) {
+    if (!n && n !== 0) return "?";
+    var units = ["B","K","M","G","T"]; var i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return n.toFixed(1) + units[i];
+  }
+
+  function loadDevices() {
+    api("/devices").then(function (r) {
+      if (r.status === 401) { panelAuth.hidden = false; panelBody.hidden = true; throw new Error("401 — token rejected"); }
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (data) {
+      var devices = data.devices || [];
+      var allowlist = data.allowed_devices || [];
+      dstSelect.innerHTML = "";
+      if (devices.length === 0) {
+        dstSelect.innerHTML = '<option value="">- no block devices visible -</option>';
+        probeEl.textContent = "No block devices visible in the container. Is /dev mounted?";
+        return;
+      }
+      var ph = document.createElement("option"); ph.value = ""; ph.textContent = "- pick a destination -";
+      dstSelect.appendChild(ph);
+      devices.forEach(function (d) {
+        var opt = document.createElement("option");
+        opt.value = d.path;
+        var allowed = allowlist.indexOf(d.path) !== -1;
+        opt.textContent = d.path + "  " + (d.model || "") + "  " + formatBytes(d.size) + (allowed ? "  allowed" : "  (not allowlisted)");
+        opt.disabled = !allowed;
+        dstSelect.appendChild(opt);
+      });
+      probeEl.textContent = "Devices loaded. Allowlist: " + (allowlist.length ? allowlist.join(", ") : "(empty — edit .env)");
+    }).catch(function (e) {
+      probeEl.textContent = "Could not load devices: " + e.message;
+    });
+  }
+
+  tokenSave.addEventListener("click", function () {
+    var t = tokenInput.value.trim();
+    if (!t) return;
+    TOKEN = t;
+    api("/devices").then(function (r) {
+      if (r.status === 401) { authError.textContent = "Token rejected."; return; }
+      if (!r.ok) { authError.textContent = "Backend error: HTTP " + r.status; return; }
+      authError.textContent = "";
+      sessionStorage.setItem("dd_backend_token", t);
+      panelAuth.hidden = true; panelBody.hidden = false;
+      loadDevices();
+    }).catch(function (e) { authError.textContent = "Request failed: " + e.message; });
+  });
+
+  function collectOptions() {
+    return {
+      compression:           document.getElementById("opt-compress").value,
+      bandwidth_limit_kbps:  parseInt(document.getElementById("opt-bw").value, 10) || 0,
+      resume_from_bytes:     parseInt(document.getElementById("opt-resume").value, 10) || 0,
+      verify_mode:           document.getElementById("opt-verify").value,
+      tolerate_errors:       document.getElementById("opt-tolerate").checked
+    };
+  }
+  function collectRequest() {
+    return {
+      target_host:   document.getElementById("target-host").value.trim(),
+      target_user:   document.getElementById("target-user").value.trim() || "root",
+      target_device: document.getElementById("target-dev").value.trim(),
+      dst_device:    dstSelect.value,
+      dst_host:      document.getElementById("dst-host").value.trim(),
+      dst_user:      document.getElementById("dst-user").value.trim() || "root",
+      options:       collectOptions()
+    };
+  }
+
+  btnDryrun.addEventListener("click", function () {
+    var req = collectRequest();
+    if (!req.target_host || !req.target_device || !req.dst_device) {
+      probeEl.textContent = "Fill in target host, source device, and pick a destination."; return;
+    }
+    probeEl.textContent = "Running dry-run…";
+    api("/dryrun", { method: "POST", body: req }).then(function (r) {
+      return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+    }).then(function (res) {
+      if (!res.ok) { probeEl.textContent = "Dry-run failed: " + (res.j.error || "unknown"); return; }
+      dryrunOut.hidden = false;
+      dryrunOut.querySelector("code").textContent = res.j.command;
+      probeEl.textContent = "Dry-run OK. Source size: " + formatBytes(res.j.bytes_total) + ". Inspect, then Start clone.";
+      btnClone.disabled = false;
+    }).catch(function (e) { probeEl.textContent = "Dry-run request failed: " + e.message; });
+  });
+
+  btnClone.addEventListener("click", function () {
+    var req = collectRequest();
+    if (!req.target_host || !req.target_device || !req.dst_device) return;
+    var expected = req.dst_host
+      ? (req.dst_user + "@" + req.dst_host + ":" + req.dst_device)
+      : req.dst_device;
+    var typed = window.prompt(
+      "Type the destination to confirm.\n\n" +
+      (req.dst_host ? "Remote destination — extra verification required:\n" : "") +
+      "Expected: " + expected, "");
+    if (typed !== expected) { probeEl.textContent = "Confirmation did not match. Nothing was started."; return; }
+    req.confirm = typed;
+    probeEl.textContent = "Starting…";
+    api("/clone", { method: "POST", body: req }).then(function (r) {
+      return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+    }).then(function (res) {
+      if (!res.ok) { probeEl.textContent = "Start failed: " + (res.j.error || "unknown"); return; }
+      progressWrap.hidden = false; verifyOut.hidden = true;
+      btnAbort.disabled = false; btnClone.disabled = true;
+      pollStatus();
+    }).catch(function (e) { probeEl.textContent = "Start request failed: " + e.message; });
+  });
+
+  function pollStatus() {
+    if (jobPoll) clearInterval(jobPoll);
+    jobPoll = setInterval(function () {
+      api("/status").then(function (r) { return r.json(); }).then(function (data) {
+        var j = data.job;
+        if (!j) { clearInterval(jobPoll); jobPoll = null; return; }
+        var pct = j.percent || 0;
+        progressBar.style.width = pct + "%";
+        var phase = j.phase || "cloning";
+        progressText.textContent =
+          phase + "  " + (j.status || "") + "  " +
+          formatBytes(j.bytes_done || 0) + " / " + formatBytes(j.bytes_total || 0) +
+          "  (" + pct.toFixed(1) + "%)" +
+          (j.error ? "  error: " + j.error : "");
+        if (j.verify) {
+          verifyOut.hidden = false;
+          verifyOut.querySelector("code").textContent =
+            "verify: " + (j.verify.match ? "MATCH" : "MISMATCH") + "\n" +
+            (j.verify.source_sha ? "source: " + j.verify.source_sha + "\n" : "") +
+            (j.verify.dest_sha   ? "dest:   " + j.verify.dest_sha + "\n" : "") +
+            (j.verify.detail ? j.verify.detail : "");
+        }
+        if (j.status === "done" || j.status === "errored" || j.status === "aborted") {
+          clearInterval(jobPoll); jobPoll = null;
+          btnAbort.disabled = true; btnClone.disabled = false;
+        }
+      }).catch(function () { clearInterval(jobPoll); jobPoll = null; });
+    }, 1000);
+  }
+
+  btnAbort.addEventListener("click", function () {
+    api("/abort", { method: "POST", body: {} }).catch(function () {});
+  });
+
+  probe();
 })();
 </script>
 </body></html>
