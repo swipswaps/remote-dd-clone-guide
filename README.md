@@ -1,25 +1,25 @@
-# Remote dd Clone Guide
+# Pages ↔ Local Docker Bridge — Audit & Interactive Guide
 
 Site: https://swipswaps.github.io/remote-dd-clone-guide/
 
-Interactive guide to cloning a **running SATA disk** to a **USB‑attached SATA disk** over SSH, with live progress.
+Static-first GitHub Pages frontends that **probe a localhost Docker backend**
+and **degrade gracefully** when it is absent. Audited from five live repos:
 
-## What it covers
+- `solar-nostoc-cad-bridge`
+- `hardened-agent-harness-explainer`
+- `ram-catalog-app`
+- `receipts-ocr-rag`
+- `receipts-ocr`
 
-- `dd` piped through SSH with `status=progress`
-- `pv` for a real progress bar, throughput, and ETA
-- `dd`'s own `status=progress` when `pv` is not available
-- `kill -USR1` to request an on‑demand progress report
-- Compression (`pigz` / `lz4`) to reduce SSH bandwidth
-- Safety checks before writing to the target device
+The page walks through the detection contract, the verbatim fallback strings
+each repo emits, and the generic `docker compose up -d` upgrade path. No
+OCR, CAD, or RAG code is included — only the bridge pattern.
 
-## Quick start
+## Helper script
+
+`scripts/bridge-check.sh` probes a local backend and prints whether
+advanced mode is available, without depending on any specific repo.
 
 ```bash
-# On the machine that has the USB target attached:
-lsblk -o NAME,SIZE,TYPE,MODEL,TRAN
-# Identify the USB disk, then run:
-ssh user@source-host "sudo dd if=/dev/sda bs=4M status=progress" | sudo dd of=/dev/sdb bs=4M status=progress conv=fsync
+bash scripts/bridge-check.sh 8080
 ```
-
-Open the site for the full step‑by‑step walkthrough.

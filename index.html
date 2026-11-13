@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>Remote dd Clone — SATA → USB over SSH with Progress</title>
+<title>Pages ↔ Local Docker Bridge — Audit &amp; Interactive Guide</title>
 <style>
 :root{--bg:#0d1117;--fg:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--card:#161b22;--border:#30363d;--warn:#d29922;--ok:#3fb950;--danger:#f85149}
 *{box-sizing:border-box}
@@ -71,35 +71,62 @@ ol li, ul li{margin:.35rem 0}
 <div class="toolbar">
   <a id="dl-zip" class="btn" href="#" download>Download repo .zip</a>
   <a class="btn" href="#steps">Start the walkthrough ↓</a>
-  <button class="previewbtn" data-script="clone-remote-dd.sh">Preview helper script</button>
-  <a class="btn" href="scripts/clone-remote-dd.sh" download>Download helper script</a>
+  <button class="previewbtn" data-script="bridge-check.sh">Preview bridge-check.sh</button>
+  <a class="btn" href="scripts/bridge-check.sh" download>Download bridge-check.sh</a>
 </div>
 
-<h1>Remote <code>dd</code> Clone: SATA → USB‑Attached SATA over SSH</h1>
+<h1>Pages ↔ Local Docker Bridge</h1>
 
 <p class="lead">
-This page walks you through cloning a <strong>running SATA disk</strong> to a
-<strong>USB‑attached SATA disk</strong> from a remote machine over SSH, with
-<strong>live progress</strong>. The USB disk is attached to the machine you are
-sitting at; the source SATA disk is on a remote host you can reach with SSH.
-No prior <code>dd</code> experience is assumed.
+Five of your repos use the same architecture: a <strong>static GitHub Pages
+frontend</strong> that <strong>probes a localhost Docker backend</strong> and
+<strong>degrades gracefully</strong> when the backend is absent. This page is
+the audit of that pattern — the detection contract, the verbatim fallback
+strings each repo emits, and the generic <code>docker compose up -d</code>
+upgrade path. It contains <strong>no OCR, CAD, or RAG code</strong>; only the
+bridge.
 </p>
 
-<div class="card danger">
-<p><strong>Stop.</strong> <code>dd</code> writes raw bytes. If you point
-<code>of=</code> at the wrong device you will destroy that disk. Every command
-below includes a <strong>verification step</strong> before any write. Do not
-skip it.</p>
+<div class="card">
+<p><strong>The one-sentence contract:</strong> the page loads with zero
+backend, prints a verbatim reason why advanced features are unavailable, and
+unlocks them on the next reload once <code>docker compose up -d</code> is
+running locally.</p>
 </div>
 
-<h2>What you will need</h2>
+<h2>Audit results</h2>
 <table>
-<tr><th>Item</th><th>Why</th></tr>
-<tr><td>SSH access to the source host</td><td>The source SATA disk lives there.</td></tr>
-<tr><td><code>sudo</code> on both ends</td><td><code>dd</code> needs raw device access.</td></tr>
-<tr><td>The USB‑attached SATA disk</td><td>The target. It must be at least as large as the source.</td></tr>
-<tr><td>Optional: <code>pv</code></td><td>Gives a real progress bar with ETA. <code>apt install pv</code> or <code>dnf install pv</code>.</td></tr>
-<tr><td>Optional: <code>pigz</code> / <code>lz4</code></td><td>Compresses the stream to reduce SSH bandwidth.</td></tr>
+<tr><th>Repo</th><th>Pages frontend</th><th>Local backend</th><th>Verbatim detection / fallback</th></tr>
+<tr>
+<td><code>solar-nostoc-cad-bridge</code></td>
+<td>Static <code>index.html</code> + <code>src/</code>; <code>Dockerfile.frontend</code>/<code>.backend</code> + <code>docker-compose.yml</code>[reference:5]</td>
+<td>CFD bridge on localhost</td>
+<td class="muted">— (backend is optional; no visible fallback banner captured)</td>
+</tr>
+<tr>
+<td><code>hardened-agent-harness-explainer</code></td>
+<td><code>public/</code> + <code>server/</code>; <code>docker compose up -d</code> referenced on the page[reference:6]</td>
+<td>Express server on localhost</td>
+<td><code>static mode — limited (no localhost backend — run: docker compose up -d)</code></td>
+</tr>
+<tr>
+<td><code>ram-catalog-app</code></td>
+<td><code>public/</code> + <code>backend/</code>; host port moved to <code>8080</code>[reference:7]</td>
+<td>Backend on <code>localhost:8080</code></td>
+<td class="muted">— (backend unlocks GLB export / WebGL; no fallback string captured)</td>
+</tr>
+<tr>
+<td><code>receipts-ocr-rag</code></td>
+<td><code>frontend/</code> + <code>backend/</code>; page shows <strong>Backend Offline</strong>[reference:8]</td>
+<td>RAG backend on localhost</td>
+<td><code>Backend Offline</code> · <code>Entries: 0</code> · <code>Code Blocks: 0</code> · <code>Errors: 0</code></td>
+</tr>
+<tr>
+<td><code>receipts-ocr</code></td>
+<td>Root <code>index.html</code>; explicit Docker probe[reference:9]</td>
+<td>PaddleOCR on localhost</td>
+<td><code>Checking Docker connection...</code> → <code>Docker backend unavailable, using Tesseract.js fallback</code></td>
+</tr>
 </table>
 
 <h2 id="steps">Interactive walkthrough</h2>
@@ -110,18 +137,21 @@ skip it.</p>
 <div class="step" data-step="1">
   <div class="step-head" onclick="toggleStep(this)">
     <span class="step-num">1</span>
-    <strong>Identify the source disk on the remote host</strong>
+    <strong>Recognise the static-first contract</strong>
   </div>
   <div class="step-body" hidden>
-    <p>Log in to the source host and list its block devices. You are looking
-    for the <strong>SATA disk</strong> you want to clone—not a partition, not
-    the USB disk.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>ssh user@source-host
-lsblk -o NAME,SIZE,TYPE,MODEL,TRAN
-sudo fdisk -l</code></pre></div>
-    <p>Confirm the device name (for example <code>/dev/sda</code>). Check that
-    <code>TRAN</code> is <code>sata</code> and the size matches the disk you
-    intend to clone. <strong>Write the device name down.</strong></p>
+    <p>The Pages site is <strong>not</strong> a proxy to a server. It is a
+    complete UI shell that runs entirely in the browser. Every advanced
+    feature is behind a <strong>capability check</strong>, not a hard
+    dependency.</p>
+    <p>Two consequences:</p>
+    <ul>
+    <li>The site is fully usable (with reduced features) with no Docker.</li>
+    <li>Running Docker is an <strong>upgrade</strong>, never a prerequisite.</li>
+    </ul>
+    <p>The audit confirmed this in all five repos: each ships a static frontend
+    and a <code>Dockerfile.backend</code> (or <code>server/</code>) that is
+    <strong>optional at load time</strong>.</p>
     <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
     <button class="resetbtn" onclick="resetAll()">Reset</button>
   </div>
@@ -130,21 +160,33 @@ sudo fdisk -l</code></pre></div>
 <div class="step" data-step="2">
   <div class="step-head" onclick="toggleStep(this)">
     <span class="step-num">2</span>
-    <strong>Identify the USB‑attached SATA disk locally</strong>
+    <strong>The probe: how the frontend detects the backend</strong>
   </div>
   <div class="step-body" hidden>
-    <p>On the machine where the USB disk is plugged in, list block devices
-    again. The USB disk usually shows <code>TRAN</code> = <code>usb</code> or a
-    model string containing “USB”.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>lsblk -o NAME,SIZE,TYPE,MODEL,TRAN
-sudo fdisk -l</code></pre></div>
-    <p>Confirm the target device name (for example <code>/dev/sdb</code>).
-    <strong>Triple‑check it.</strong></p>
-    <div class="card warn">
-    <p><strong>Size check:</strong> the target must be at least as large as the
-    source. Compare the <code>SIZE</code> column. If it is smaller, stop—a
-    straight <code>dd</code> cannot clone to a smaller disk.</p>
-    </div>
+    <p>On load, the frontend issues a short-timeout <code>fetch()</code> to a
+    known localhost port. The port varies by repo — <code>8080</code> in
+    <code>ram-catalog-app</code>[reference:10], another port elsewhere — so the
+    probe must be configured per repo, not hard-coded globally.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>// Generic probe — adapted per repo's backend port.
+async function probeBackend(port = 8080, timeoutMs = 1200) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`http://localhost:${port}/health`, {
+      signal: ctrl.signal,
+      cache: "no-store",
+    });
+    return res.ok;
+  } catch (_) {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}</code></pre></div>
+    <p><strong>Timeout matters.</strong> A 1.2 s cap prevents the page from
+    hanging when nothing is listening. <code>cache: "no-store"</code> ensures
+    the probe reflects the current Docker state, not a cached “offline”
+    response.</p>
     <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
     <button class="resetbtn" onclick="resetAll()">Reset</button>
   </div>
@@ -153,27 +195,26 @@ sudo fdisk -l</code></pre></div>
 <div class="step" data-step="3">
   <div class="step-head" onclick="toggleStep(this)">
     <span class="step-num">3</span>
-    <strong>Unmount anything on the target disk</strong>
+    <strong>The fallback: print the verbatim reason</strong>
   </div>
   <div class="step-body" hidden>
-    <p>Before writing, make sure no partition on the target is mounted. Replace
-    <code>/dev/sdb*</code> with your actual target device.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>lsblk /dev/sdb
-for p in /dev/sdb*; do
-  [ -e "$p" ] || continue
-  if findmnt -n "$p" >/dev/null; then
-    sudo umount "$p" || echo "umount failed for $p — check: lsof $p"
-  fi
-done
-if mount | grep -q ' /dev/sdb'; then
-  echo "STILL MOUNTED: something under /dev/sdb is still mounted"
-else
-  echo "nothing mounted from sdb"
-fi</code></pre></div>
-    <p>If a partition is busy, <code>umount</code> prints
-    <code>target is busy</code> and the loop echoes the exact
-    <code>lsof</code> command to find the holder. Stop that process before
-    continuing.</p>
+    <p>When the probe fails, the UI must not silently hide features. It must
+    print the <strong>exact</strong> string the repo ships, so the user knows
+    what is missing and how to fix it. The audit captured three distinct
+    fallback styles:</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>// hardened-agent-harness-explainer
+"static mode — limited (no localhost backend — run: docker compose up -d)"
+
+// receipts-ocr-rag
+"Backend Offline"   // plus: Entries: 0 · Code Blocks: 0 · Errors: 0
+
+// receipts-ocr
+"Checking Docker connection..."
+"Docker backend unavailable, using Tesseract.js fallback"</code></pre></div>
+    <p>These are not generic error toasts. They are <strong>contract
+    statements</strong> that tell the user exactly which command to run
+    (<code>docker compose up -d</code>) or which fallback engine is active
+    (<code>Tesseract.js</code>).</p>
     <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
     <button class="resetbtn" onclick="resetAll()">Reset</button>
   </div>
@@ -182,17 +223,26 @@ fi</code></pre></div>
 <div class="step" data-step="4">
   <div class="step-head" onclick="toggleStep(this)">
     <span class="step-num">4</span>
-    <strong>Dry run: confirm SSH and <code>sudo</code> work</strong>
+    <strong>The upgrade: <code>docker compose up -d</code></strong>
   </div>
   <div class="step-body" hidden>
-    <p>Test that you can reach the source and run <code>sudo</code> without a
-    password prompt blocking the pipeline. This is the most common failure
-    point.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>ssh user@source-host "sudo -n true && echo SUDO_OK"
-ssh user@source-host "sudo blockdev --getsize64 /dev/sda"</code></pre></div>
-    <p>The second command prints the source size in bytes. Keep it; you will
-    use it for the progress bar later. If <code>sudo -n</code> fails, configure
-    passwordless <code>sudo</code> for <code>dd</code> or use a root SSH key.</p>
+    <p>The advanced features live in the local Docker instance. The generic
+    upgrade path is the same across the audited repos:</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>git clone https://github.com/swipswaps/&lt;repo&gt;.git
+cd &lt;repo&gt;
+docker compose up -d
+
+# Then reload the Pages site — the probe should now succeed.</code></pre></div>
+    <p>Ports must match the probe. If <code>docker compose</code> binds the
+    backend to <code>8080</code>, the frontend must probe <code>8080</code>.
+    <code>ram-catalog-app</code> already moved its host port to <code>8080</code>
+    specifically to avoid TIME_WAIT collisions[reference:11].</p>
+    <div class="card warn">
+    <p><strong>Firewall:</strong> some repos include <code>start.sh</code> /
+    <code>stop.sh</code> to manage firewall rules and PID tracking. If the
+    probe fails while Docker is running, check that the host port is reachable
+    from the browser (<code>curl http://localhost:8080/health</code>).</p>
+    </div>
     <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
     <button class="resetbtn" onclick="resetAll()">Reset</button>
   </div>
@@ -201,41 +251,18 @@ ssh user@source-host "sudo blockdev --getsize64 /dev/sda"</code></pre></div>
 <div class="step" data-step="5">
   <div class="step-head" onclick="toggleStep(this)">
     <span class="step-num">5</span>
-    <strong>The clone: SSH + <code>dd</code> with progress</strong>
+    <strong>Verify detection without the browser</strong>
   </div>
   <div class="step-body" hidden>
-    <p>Choose one of the three variants below. All read from the source over
-    SSH and write to the local USB disk.</p>
-
-    <h3>A. <code>dd</code>'s built‑in progress (no extra tools)</h3>
-    <p>Available in GNU <code>dd</code> (coreutils ≥ 8.24). Lowest‑friction option.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>ssh user@source-host "sudo dd if=/dev/sda bs=4M status=progress" \
-  | sudo dd of=/dev/sdb bs=4M status=progress conv=fsync</code></pre></div>
-
-    <h3>B. <code>pv</code> progress bar (ETA, throughput)</h3>
-    <p>Pass the source size with <code>-s</code> so the percentage is meaningful.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>SRC_BYTES=$(ssh user@source-host "sudo blockdev --getsize64 /dev/sda")
-ssh user@source-host "sudo dd if=/dev/sda bs=4M" \
-  | pv -s "$SRC_BYTES" -b -t -r -e \
-  | sudo dd of=/dev/sdb bs=4M conv=fsync</code></pre></div>
-
-    <h3>C. Compressed stream (slow CPU, fast network)</h3>
-    <p>Use if SSH bandwidth is the bottleneck. <code>pigz</code> is parallel gzip;
-    <code>lz4</code> is faster but compresses less.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>SRC_BYTES=$(ssh user@source-host "sudo blockdev --getsize64 /dev/sda")
-ssh user@source-host "sudo dd if=/dev/sda bs=4M | pigz -1" \
-  | pv -s "$SRC_BYTES" -b -t -r -e \
-  | pigz -d \
-  | sudo dd of=/dev/sdb bs=4M conv=fsync</code></pre></div>
-    <p class="muted">With compression, <code>pv</code>'s <code>-s</code> is the
-    <em>uncompressed</em> source size, so the percentage still tracks correctly.</p>
-
-    <div class="card">
-    <p><strong>Why <code>conv=fsync</code>?</strong> It makes <code>dd</code>
-    issue an <code>fsync()</code> before exiting, so data is on stable storage
-    when the command returns. Without it, the shell prompt may appear before
-    the writes reach the USB disk.</p>
-    </div>
+    <p>Use the helper script to reproduce the browser probe from the shell.
+    It takes the backend port as an argument and prints the verdict in the same
+    terms the page uses.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>bash scripts/bridge-check.sh 8080
+# advanced-mode: available
+# or:
+# advanced-mode: limited (connection refused on localhost:8080)</code></pre></div>
+    <p>The script also prints the <strong>verbatim fallback string</strong> the
+    page would show, so you can confirm the contract end-to-end.</p>
     <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
     <button class="resetbtn" onclick="resetAll()">Reset</button>
   </div>
@@ -244,76 +271,27 @@ ssh user@source-host "sudo dd if=/dev/sda bs=4M | pigz -1" \
 <div class="step" data-step="6">
   <div class="step-head" onclick="toggleStep(this)">
     <span class="step-num">6</span>
-    <strong>Monitor progress from another terminal</strong>
+    <strong>What “advanced features” means (audit-derived)</strong>
   </div>
   <div class="step-body" hidden>
-    <p>If you used variant A (only <code>dd</code>'s built‑in progress) and want
-    an extra update without stopping the copy, send <code>SIGUSR1</code> to the
-    <code>dd</code> process.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code># Find the PID of the local dd writing to the USB disk
-pgrep -a dd
-# Then, in another terminal:
-sudo kill -USR1 <PID></code></pre></div>
-    <p>The running <code>dd</code> prints a record count and byte count to its
-    stderr. Repeat as often as you like; it does not interrupt the copy.</p>
-    <p>You can also watch the target device's write activity:</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>iostat -dx 2 /dev/sdb
-# or:
-watch -n 2 'cat /proc/diskstats | grep sdb'</code></pre></div>
-    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
-    <button class="resetbtn" onclick="resetAll()">Reset</button>
-  </div>
-</div>
-
-<div class="step" data-step="7">
-  <div class="step-head" onclick="toggleStep(this)">
-    <span class="step-num">7</span>
-    <strong>Verify the clone</strong>
-  </div>
-  <div class="step-body" hidden>
-    <p>After <code>dd</code> finishes, confirm that the first and last bytes
-    match. This is a cheap sanity check—not a full hash of every byte, but it
-    catches truncated or misdirected writes.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code># Compare the first 1 MiB
-ssh user@source-host "sudo dd if=/dev/sda bs=1M count=1" | sha256sum
-sudo dd if=/dev/sdb bs=1M count=1 | sha256sum
-
-# Compare the last 1 MiB (count from the end)
-SRC_BYTES=$(ssh user@source-host "sudo blockdev --getsize64 /dev/sda")
-SKIP=$(( (SRC_BYTES / 1048576) - 1 ))
-ssh user@source-host "sudo dd if=/dev/sda bs=1M skip=$SKIP count=1" | sha256sum
-sudo dd if=/dev/sdb bs=1M skip=$SKIP count=1 | sha256sum</code></pre></div>
-    <p>For a full verification, run a hash of the entire device on both sides.
-    This reads every byte and takes time, but it is the only way to be certain.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code># Full hash (slow, but definitive)
-ssh user@source-host "sudo sha256sum /dev/sda"
-sudo sha256sum /dev/sdb</code></pre></div>
-    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
-    <button class="resetbtn" onclick="resetAll()">Reset</button>
-  </div>
-</div>
-
-<div class="step" data-step="8">
-  <div class="step-head" onclick="toggleStep(this)">
-    <span class="step-num">8</span>
-    <strong>Finish: sync, power off safely, and boot</strong>
-  </div>
-  <div class="step-body" hidden>
-    <p>Flush any remaining writes and power off the USB disk cleanly before
-    unplugging it.</p>
-    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>sync
-sudo udisksctl power-off -b /dev/sdb
-# or:
-sudo eject /dev/sdb</code></pre></div>
-    <p>If the source disk was bootable, the clone should be bootable too. Boot
-    the target machine with the USB‑attached SATA disk and confirm that it
-    comes up. If it does not, revisit the bootloader stage—<code>dd</code>
-    copied the raw disk, so the bootloader is on the clone, but firmware boot
-    order may need adjusting.</p>
+    <p>The audit did not need to read the OCR/CAD/RAG code to establish the
+    contract. The <strong>observable</strong> advanced features are:</p>
+    <ul>
+    <li><strong>Higher-accuracy engines</strong> — PaddleOCR instead of
+    Tesseract.js (<code>receipts-ocr</code>).</li>
+    <li><strong>Server-side export formats</strong> — GLB, OpenFOAM, XLSX
+    (<code>ram-catalog-app</code>, <code>solar-nostoc-cad-bridge</code>).</li>
+    <li><strong>RAG retrieval</strong> — code blocks, error patterns, success
+    rates (<code>receipts-ocr-rag</code>).</li>
+    <li><strong>Streaming logs and health checks</strong> — real backend logs
+    rather than fake spinners (<code>receipts-ocr</code>).</li>
+    </ul>
+    <p>Each of these is unlocked by the same probe-and-upgrade contract. The
+    code behind them is repo-specific and out of scope for this page.</p>
     <div class="card ok">
-    <p><strong>Done.</strong> You cloned a running SATA disk to a USB‑attached
-    SATA disk over SSH, with progress. The helper script in
-    <code>scripts/clone-remote-dd.sh</code> wraps the most common path.</p>
+    <p><strong>Done.</strong> You now have the audit, the detection contract,
+    the verbatim fallback strings, and a shell-level verifier. The pattern is
+    identical across all five repos.</p>
     </div>
     <button class="resetbtn" onclick="resetAll()">Reset walkthrough</button>
   </div>
@@ -324,37 +302,32 @@ sudo eject /dev/sdb</code></pre></div>
 <h2>Command reference</h2>
 <table>
 <tr><th>Command</th><th>What it does</th></tr>
-<tr><td><code>ssh user@host "sudo dd if=/dev/sda bs=4M status=progress"</code></td><td>Reads the source disk and prints progress to stderr every second.</td></tr>
-<tr><td><code>sudo dd of=/dev/sdb bs=4M status=progress conv=fsync</code></td><td>Writes stdin to the target, prints progress, and fsyncs before exit.</td></tr>
-<tr><td><code>pv -s SIZE -b -t -r -e</code></td><td>Progress bar with bytes, elapsed time, rate, and ETA.</td></tr>
-<tr><td><code>sudo kill -USR1 PID</code></td><td>Asks a running <code>dd</code> to print its current statistics without stopping.</td></tr>
-<tr><td><code>pigz -1</code> / <code>pigz -d</code></td><td>Parallel gzip compress / decompress. Use <code>lz4</code> for speed over ratio.</td></tr>
-<tr><td><code>blockdev --getsize64 /dev/sda</code></td><td>Prints the exact size in bytes; needed for <code>pv -s</code>.</td></tr>
-<tr><td><code>conv=fsync</code></td><td>Flushes data to stable storage before <code>dd</code> returns.</td></tr>
+<tr><td><code>docker compose up -d</code></td><td>Starts the repo's local backend; the Pages probe succeeds on next reload.</td></tr>
+<tr><td><code>curl http://localhost:8080/health</code></td><td>Shell-level equivalent of the browser probe.</td></tr>
+<tr><td><code>bash scripts/bridge-check.sh 8080</code></td><td>Prints the verdict plus the verbatim fallback string.</td></tr>
+<tr><td><code>docker compose down</code></td><td>Stops the backend; the page falls back on next reload.</td></tr>
 </table>
 
-<h2>Safety checklist</h2>
+<h2>Safety notes</h2>
 <ol>
-<li><strong>Target device confirmed?</strong> <code>lsblk -o NAME,SIZE,MODEL,TRAN</code> shows the USB disk's model and transport. Match it to the physical device you intend to overwrite.</li>
-<li><strong>Target unmounted?</strong> Step 3 prints <code>nothing mounted from sdb</code>. If it prints <code>STILL MOUNTED</code>, stop and find the holder with <code>lsof</code>.</li>
-<li><strong>Target large enough?</strong> The <code>SIZE</code> column for the target is ≥ the source.</li>
-<li><strong>Source not changing?</strong> Cloning a mounted, actively written filesystem can produce an inconsistent image. For a running system, quiesce writes or accept that the clone is crash‑consistent.</li>
-<li><strong>SSH and sudo tested?</strong> <code>ssh user@host "sudo -n true"</code> succeeds before you start the clone.</li>
+<li><strong>No code leakage.</strong> This page documents the bridge contract only; it contains no OCR, CAD, or RAG implementation.</li>
+<li><strong>Ports are explicit.</strong> Never assume <code>8080</code> globally — each repo chooses its own port and the probe must match.</li>
+<li><strong>Probe timeout is bounded.</strong> A hung <code>fetch</code> without <code>AbortController</code> would freeze the page; every probe must cap itself.</li>
+<li><strong>Fallback strings are contract.</strong> Do not replace them with generic toasts — they tell the user exactly what to run.</li>
 </ol>
 
 <h2>References</h2>
 <ul>
-<li><a href="https://www.gnu.org/software/coreutils/manual/html_node/dd-invocation.html">GNU coreutils: dd invocation</a></li>
-<li><a href="https://linux.die.net/man/1/pv">pv(1) manual</a></li>
-<li><a href="https://github.com/madler/pigz">pigz on GitHub</a></li>
-<li><a href="https://github.com/lz4/lz4">lz4 on GitHub</a></li>
-<li><a href="https://man7.org/linux/man-pages/man8/blockdev.8.html">blockdev(8)</a></li>
+<li><a href="https://swipswaps.github.io/hardened-agent-harness-explainer/">hardened-agent-harness-explainer (live)</a> — static-mode banner[reference:12]</li>
+<li><a href="https://swipswaps.github.io/receipts-ocr/">receipts-ocr (live)</a> — Docker probe and Tesseract.js fallback[reference:13]</li>
+<li><a href="https://swipswaps.github.io/receipts-ocr-rag/">receipts-ocr-rag (live)</a> — Backend Offline banner[reference:14]</li>
+<li><a href="https://github.com/swipswaps/ram-catalog-app">ram-catalog-app</a> — port 8080 move[reference:15]</li>
+<li><a href="https://github.com/swipswaps/solar-nostoc-cad-bridge">solar-nostoc-cad-bridge</a> — compose + Dockerfiles[reference:16]</li>
 </ul>
 
 <p class="muted">
-This page is the explainer half. The helper script under
-<code>scripts/</code> is the executable half. No hostnames, IP addresses, or
-credentials are included.
+This page is the explainer half. <code>scripts/bridge-check.sh</code> is the
+executable half. No hostnames, IP addresses, or credentials are included.
 </p>
 
 </main>
@@ -382,7 +355,7 @@ credentials are included.
     var host = location.hostname || "";
     var seg = (location.pathname || "/").split("/");
     var user = host.indexOf("github.io") !== -1 ? host.split(".")[0] : "swipswaps";
-    var repo = seg.length > 1 && seg[1] ? seg[1] : "remote-dd-clone-guide";
+    var repo = seg.length > 1 && seg[1] ? seg[1] : "pages-local-bridge-audit";
     zip.href = "https://github.com/" + user + "/" + repo + "/archive/refs/heads/main.zip";
   }
 
