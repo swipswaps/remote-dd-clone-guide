@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Remote dd Clone — SATA → USB over SSH with Progress</title>
+<style>
+:root{--bg:#0d1117;--fg:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--card:#161b22;--border:#30363d;--warn:#d29922;--ok:#3fb950;--danger:#f85149}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+main{max-width:900px;margin:0 auto;padding:2rem 1.25rem 4rem}
+h1{font-size:2rem;line-height:1.2;margin:0 0 .5rem}
+h2{margin-top:2.75rem;border-bottom:1px solid var(--border);padding-bottom:.4rem}
+h3{margin-top:1.75rem;color:var(--accent)}
+a{color:var(--accent)}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em}
+pre{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem;overflow:auto;line-height:1.45;margin:0}
+code{background:var(--card);padding:.1em .35em;border-radius:4px}
+pre code{background:none;padding:0}
+.lead{font-size:1.05rem}
+.muted{color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem;margin:1rem 0}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.danger{color:var(--danger)}
+table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.94em}
+th,td{text-align:left;padding:.55rem .65rem;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--muted);font-weight:600}
+ol li, ul li{margin:.35rem 0}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:.5rem;margin:0 0 1.5rem}
+.btn{display:inline-block;background:var(--card);border:1px solid var(--border);border-radius:6px;
+     padding:.45rem .8rem;font:inherit;font-size:.9em;color:var(--fg);text-decoration:none;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.codeblock{position:relative;margin:1rem 0}
+.codebar{display:flex;justify-content:flex-end;gap:.4rem;margin-bottom:.3rem}
+.copybtn{background:var(--card);border:1px solid var(--border);border-radius:6px;
+         padding:.25rem .65rem;font:inherit;font-size:.8em;color:var(--muted);cursor:pointer}
+.copybtn:hover{color:var(--accent);border-color:var(--accent)}
+
+.step{border-left:3px solid var(--border);padding-left:1rem;margin:1.5rem 0;transition:border-color .2s}
+.step.active{border-left-color:var(--accent)}
+.step.done{border-left-color:var(--ok);opacity:.85}
+.step-head{display:flex;align-items:center;gap:.6rem;cursor:pointer;user-select:none}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:1.8rem;height:1.8rem;
+          border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:.85em;font-weight:600;flex-shrink:0}
+.step.done .step-num{background:var(--ok);color:#000;border-color:var(--ok)}
+.step-body{margin-top:.75rem}
+.nextbtn{background:var(--accent);border:none;border-radius:6px;padding:.45rem .9rem;font:inherit;font-size:.9em;color:#000;cursor:pointer;font-weight:600;margin-top:.75rem}
+.nextbtn:hover{opacity:.9}
+.resetbtn{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:.3rem .7rem;font:inherit;font-size:.8em;color:var(--muted);cursor:pointer;margin-left:.5rem}
+.resetbtn:hover{color:var(--accent)}
+
+.previewbtn{background:var(--card);border:1px solid var(--border);border-radius:6px;
+  padding:.25rem .65rem;font:inherit;font-size:.8em;color:var(--muted);cursor:pointer}
+.previewbtn:hover{color:var(--accent);border-color:var(--accent)}
+
+.modal{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center}
+.modal[hidden]{display:none}
+.modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.68)}
+.modal-body{position:relative;background:var(--card);border:1px solid var(--border);border-radius:10px;
+  width:min(920px,94vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.55)}
+.modal-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;
+  padding:.7rem 1rem;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.modal-title{font-weight:600;color:var(--accent);font-family:ui-monospace,monospace;
+  font-size:.92em;word-break:break-all;flex:1 1 auto}
+.modal-actions{display:flex;gap:.4rem;flex-shrink:0}
+.closebtn{background:var(--card);border:1px solid var(--border);border-radius:6px;
+  padding:.25rem .7rem;font:inherit;font-size:1.1em;line-height:1;color:var(--muted);cursor:pointer}
+.closebtn:hover{color:var(--accent);border-color:var(--accent)}
+#modal-pre{flex:1;overflow:auto;border:none;border-radius:0 0 10px 10px;min-height:0}
+</style></head><body><main>
+
+<div class="toolbar">
+  <a id="dl-zip" class="btn" href="#" download>Download repo .zip</a>
+  <a class="btn" href="#steps">Start the walkthrough ↓</a>
+  <button class="previewbtn" data-script="clone-remote-dd.sh">Preview helper script</button>
+  <a class="btn" href="scripts/clone-remote-dd.sh" download>Download helper script</a>
+</div>
+
+<h1>Remote <code>dd</code> Clone: SATA → USB‑Attached SATA over SSH</h1>
+
+<p class="lead">
+This page walks you through cloning a <strong>running SATA disk</strong> to a
+<strong>USB‑attached SATA disk</strong> from a remote machine over SSH, with
+<strong>live progress</strong>. The USB disk is attached to the machine you are
+sitting at; the source SATA disk is on a remote host you can reach with SSH.
+No prior <code>dd</code> experience is assumed.
+</p>
+
+<div class="card danger">
+<p><strong>Stop.</strong> <code>dd</code> writes raw bytes. If you point
+<code>of=</code> at the wrong device you will destroy that disk. Every command
+below includes a <strong>verification step</strong> before any write. Do not
+skip it.</p>
+</div>
+
+<h2>What you will need</h2>
+<table>
+<tr><th>Item</th><th>Why</th></tr>
+<tr><td>SSH access to the source host</td><td>The source SATA disk lives there.</td></tr>
+<tr><td><code>sudo</code> on both ends</td><td><code>dd</code> needs raw device access.</td></tr>
+<tr><td>The USB‑attached SATA disk</td><td>The target. It must be at least as large as the source.</td></tr>
+<tr><td>Optional: <code>pv</code></td><td>Gives a real progress bar with ETA. <code>apt install pv</code> or <code>dnf install pv</code>.</td></tr>
+<tr><td>Optional: <code>pigz</code> / <code>lz4</code></td><td>Compresses the stream to reduce SSH bandwidth.</td></tr>
+</table>
+
+<h2 id="steps">Interactive walkthrough</h2>
+<p class="muted">Click a step header to expand it. Use <em>Mark done &amp; next</em> to advance.</p>
+
+<div id="steps-container">
+
+<div class="step" data-step="1">
+  <div class="step-head" onclick="toggleStep(this)">
+    <span class="step-num">1</span>
+    <strong>Identify the source disk on the remote host</strong>
+  </div>
+  <div class="step-body" hidden>
+    <p>Log in to the source host and list its block devices. You are looking
+    for the <strong>SATA disk</strong> you want to clone—not a partition, not
+    the USB disk.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>ssh user@source-host
+lsblk -o NAME,SIZE,TYPE,MODEL,TRAN
+sudo fdisk -l</code></pre></div>
+    <p>Confirm the device name (for example <code>/dev/sda</code>). Check that
+    <code>TRAN</code> is <code>sata</code> and the size matches the disk you
+    intend to clone. <strong>Write the device name down.</strong></p>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="2">
+  <div class="step-head" onclick="toggleStep(this)">
+    <span class="step-num">2</span>
+    <strong>Identify the USB‑attached SATA disk locally</strong>
+  </div>
+  <div class="step-body" hidden>
+    <p>On the machine where the USB disk is plugged in, list block devices
+    again. The USB disk usually shows <code>TRAN</code> = <code>usb</code> or a
+    model string containing “USB”.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>lsblk -o NAME,SIZE,TYPE,MODEL,TRAN
+sudo fdisk -l</code></pre></div>
+    <p>Confirm the target device name (for example <code>/dev/sdb</code>).
+    <strong>Triple‑check it.</strong></p>
+    <div class="card warn">
+    <p><strong>Size check:</strong> the target must be at least as large as the
+    source. Compare the <code>SIZE</code> column. If it is smaller, stop—a
+    straight <code>dd</code> cannot clone to a smaller disk.</p>
+    </div>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="3">
+  <div class="step-head" onclick="toggleStep(this)">
+    <span class="step-num">3</span>
+    <strong>Unmount anything on the target disk</strong>
+  </div>
+  <div class="step-body" hidden>
+    <p>Before writing, make sure no partition on the target is mounted. Replace
+    <code>/dev/sdb*</code> with your actual target device.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>lsblk /dev/sdb
+for p in /dev/sdb*; do
+  [ -e "$p" ] || continue
+  if findmnt -n "$p" >/dev/null; then
+    sudo umount "$p" || echo "umount failed for $p — check: lsof $p"
+  fi
+done
+if mount | grep -q ' /dev/sdb'; then
+  echo "STILL MOUNTED: something under /dev/sdb is still mounted"
+else
+  echo "nothing mounted from sdb"
+fi</code></pre></div>
+    <p>If a partition is busy, <code>umount</code> prints
+    <code>target is busy</code> and the loop echoes the exact
+    <code>lsof</code> command to find the holder. Stop that process before
+    continuing.</p>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="4">
+  <div class="step-head" onclick="toggleStep(this)">
+    <span class="step-num">4</span>
+    <strong>Dry run: confirm SSH and <code>sudo</code> work</strong>
+  </div>
+  <div class="step-body" hidden>
+    <p>Test that you can reach the source and run <code>sudo</code> without a
+    password prompt blocking the pipeline. This is the most common failure
+    point.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>ssh user@source-host "sudo -n true && echo SUDO_OK"
+ssh user@source-host "sudo blockdev --getsize64 /dev/sda"</code></pre></div>
+    <p>The second command prints the source size in bytes. Keep it; you will
+    use it for the progress bar later. If <code>sudo -n</code> fails, configure
+    passwordless <code>sudo</code> for <code>dd</code> or use a root SSH key.</p>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="5">
+  <div class="step-head" onclick="toggleStep(this)">
+    <span class="step-num">5</span>
+    <strong>The clone: SSH + <code>dd</code> with progress</strong>
+  </div>
+  <div class="step-body" hidden>
+    <p>Choose one of the three variants below. All read from the source over
+    SSH and write to the local USB disk.</p>
+
+    <h3>A. <code>dd</code>'s built‑in progress (no extra tools)</h3>
+    <p>Available in GNU <code>dd</code> (coreutils ≥ 8.24). Lowest‑friction option.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>ssh user@source-host "sudo dd if=/dev/sda bs=4M status=progress" \
+  | sudo dd of=/dev/sdb bs=4M status=progress conv=fsync</code></pre></div>
+
+    <h3>B. <code>pv</code> progress bar (ETA, throughput)</h3>
+    <p>Pass the source size with <code>-s</code> so the percentage is meaningful.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>SRC_BYTES=$(ssh user@source-host "sudo blockdev --getsize64 /dev/sda")
+ssh user@source-host "sudo dd if=/dev/sda bs=4M" \
+  | pv -s "$SRC_BYTES" -b -t -r -e \
+  | sudo dd of=/dev/sdb bs=4M conv=fsync</code></pre></div>
+
+    <h3>C. Compressed stream (slow CPU, fast network)</h3>
+    <p>Use if SSH bandwidth is the bottleneck. <code>pigz</code> is parallel gzip;
+    <code>lz4</code> is faster but compresses less.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>SRC_BYTES=$(ssh user@source-host "sudo blockdev --getsize64 /dev/sda")
+ssh user@source-host "sudo dd if=/dev/sda bs=4M | pigz -1" \
+  | pv -s "$SRC_BYTES" -b -t -r -e \
+  | pigz -d \
+  | sudo dd of=/dev/sdb bs=4M conv=fsync</code></pre></div>
+    <p class="muted">With compression, <code>pv</code>'s <code>-s</code> is the
+    <em>uncompressed</em> source size, so the percentage still tracks correctly.</p>
+
+    <div class="card">
+    <p><strong>Why <code>conv=fsync</code>?</strong> It makes <code>dd</code>
+    issue an <code>fsync()</code> before exiting, so data is on stable storage
+    when the command returns. Without it, the shell prompt may appear before
+    the writes reach the USB disk.</p>
+    </div>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="6">
+  <div class="step-head" onclick="toggleStep(this)">
+    <span class="step-num">6</span>
+    <strong>Monitor progress from another terminal</strong>
+  </div>
+  <div class="step-body" hidden>
+    <p>If you used variant A (only <code>dd</code>'s built‑in progress) and want
+    an extra update without stopping the copy, send <code>SIGUSR1</code> to the
+    <code>dd</code> process.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code># Find the PID of the local dd writing to the USB disk
+pgrep -a dd
+# Then, in another terminal:
+sudo kill -USR1 <PID></code></pre></div>
+    <p>The running <code>dd</code> prints a record count and byte count to its
+    stderr. Repeat as often as you like; it does not interrupt the copy.</p>
+    <p>You can also watch the target device's write activity:</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>iostat -dx 2 /dev/sdb
+# or:
+watch -n 2 'cat /proc/diskstats | grep sdb'</code></pre></div>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="7">
+  <div class="step-head" onclick="toggleStep(this)">
+    <span class="step-num">7</span>
+    <strong>Verify the clone</strong>
+  </div>
+  <div class="step-body" hidden>
+    <p>After <code>dd</code> finishes, confirm that the first and last bytes
+    match. This is a cheap sanity check—not a full hash of every byte, but it
+    catches truncated or misdirected writes.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code># Compare the first 1 MiB
+ssh user@source-host "sudo dd if=/dev/sda bs=1M count=1" | sha256sum
+sudo dd if=/dev/sdb bs=1M count=1 | sha256sum
+
+# Compare the last 1 MiB (count from the end)
+SRC_BYTES=$(ssh user@source-host "sudo blockdev --getsize64 /dev/sda")
+SKIP=$(( (SRC_BYTES / 1048576) - 1 ))
+ssh user@source-host "sudo dd if=/dev/sda bs=1M skip=$SKIP count=1" | sha256sum
+sudo dd if=/dev/sdb bs=1M skip=$SKIP count=1 | sha256sum</code></pre></div>
+    <p>For a full verification, run a hash of the entire device on both sides.
+    This reads every byte and takes time, but it is the only way to be certain.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code># Full hash (slow, but definitive)
+ssh user@source-host "sudo sha256sum /dev/sda"
+sudo sha256sum /dev/sdb</code></pre></div>
+    <button class="nextbtn" onclick="nextStep(this)">Mark done &amp; next</button>
+    <button class="resetbtn" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="step" data-step="8">
+  <div class="step-head" onclick="toggleStep(this)">
+    <span class="step-num">8</span>
+    <strong>Finish: sync, power off safely, and boot</strong>
+  </div>
+  <div class="step-body" hidden>
+    <p>Flush any remaining writes and power off the USB disk cleanly before
+    unplugging it.</p>
+    <div class="codeblock"><div class="codebar"><button class="copybtn" type="button">Copy</button></div><pre><code>sync
+sudo udisksctl power-off -b /dev/sdb
+# or:
+sudo eject /dev/sdb</code></pre></div>
+    <p>If the source disk was bootable, the clone should be bootable too. Boot
+    the target machine with the USB‑attached SATA disk and confirm that it
+    comes up. If it does not, revisit the bootloader stage—<code>dd</code>
+    copied the raw disk, so the bootloader is on the clone, but firmware boot
+    order may need adjusting.</p>
+    <div class="card ok">
+    <p><strong>Done.</strong> You cloned a running SATA disk to a USB‑attached
+    SATA disk over SSH, with progress. The helper script in
+    <code>scripts/clone-remote-dd.sh</code> wraps the most common path.</p>
+    </div>
+    <button class="resetbtn" onclick="resetAll()">Reset walkthrough</button>
+  </div>
+</div>
+
+</div>
+
+<h2>Command reference</h2>
+<table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>ssh user@host "sudo dd if=/dev/sda bs=4M status=progress"</code></td><td>Reads the source disk and prints progress to stderr every second.</td></tr>
+<tr><td><code>sudo dd of=/dev/sdb bs=4M status=progress conv=fsync</code></td><td>Writes stdin to the target, prints progress, and fsyncs before exit.</td></tr>
+<tr><td><code>pv -s SIZE -b -t -r -e</code></td><td>Progress bar with bytes, elapsed time, rate, and ETA.</td></tr>
+<tr><td><code>sudo kill -USR1 PID</code></td><td>Asks a running <code>dd</code> to print its current statistics without stopping.</td></tr>
+<tr><td><code>pigz -1</code> / <code>pigz -d</code></td><td>Parallel gzip compress / decompress. Use <code>lz4</code> for speed over ratio.</td></tr>
+<tr><td><code>blockdev --getsize64 /dev/sda</code></td><td>Prints the exact size in bytes; needed for <code>pv -s</code>.</td></tr>
+<tr><td><code>conv=fsync</code></td><td>Flushes data to stable storage before <code>dd</code> returns.</td></tr>
+</table>
+
+<h2>Safety checklist</h2>
+<ol>
+<li><strong>Target device confirmed?</strong> <code>lsblk -o NAME,SIZE,MODEL,TRAN</code> shows the USB disk's model and transport. Match it to the physical device you intend to overwrite.</li>
+<li><strong>Target unmounted?</strong> Step 3 prints <code>nothing mounted from sdb</code>. If it prints <code>STILL MOUNTED</code>, stop and find the holder with <code>lsof</code>.</li>
+<li><strong>Target large enough?</strong> The <code>SIZE</code> column for the target is ≥ the source.</li>
+<li><strong>Source not changing?</strong> Cloning a mounted, actively written filesystem can produce an inconsistent image. For a running system, quiesce writes or accept that the clone is crash‑consistent.</li>
+<li><strong>SSH and sudo tested?</strong> <code>ssh user@host "sudo -n true"</code> succeeds before you start the clone.</li>
+</ol>
+
+<h2>References</h2>
+<ul>
+<li><a href="https://www.gnu.org/software/coreutils/manual/html_node/dd-invocation.html">GNU coreutils: dd invocation</a></li>
+<li><a href="https://linux.die.net/man/1/pv">pv(1) manual</a></li>
+<li><a href="https://github.com/madler/pigz">pigz on GitHub</a></li>
+<li><a href="https://github.com/lz4/lz4">lz4 on GitHub</a></li>
+<li><a href="https://man7.org/linux/man-pages/man8/blockdev.8.html">blockdev(8)</a></li>
+</ul>
+
+<p class="muted">
+This page is the explainer half. The helper script under
+<code>scripts/</code> is the executable half. No hostnames, IP addresses, or
+credentials are included.
+</p>
+
+</main>
+
+<div id="preview-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-backdrop" data-close="1"></div>
+  <div class="modal-body">
+    <div class="modal-head">
+      <span class="modal-title" id="modal-title">Script preview</span>
+      <div class="modal-actions">
+        <button class="copybtn" id="modal-copy" type="button">Copy</button>
+        <button class="closebtn" id="modal-close" type="button" aria-label="Close preview">×</button>
+      </div>
+    </div>
+    <pre id="modal-pre"><code id="modal-code"></code></pre>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var zip = document.getElementById("dl-zip");
+  if (zip) {
+    var host = location.hostname || "";
+    var seg = (location.pathname || "/").split("/");
+    var user = host.indexOf("github.io") !== -1 ? host.split(".")[0] : "swipswaps";
+    var repo = seg.length > 1 && seg[1] ? seg[1] : "remote-dd-clone-guide";
+    zip.href = "https://github.com/" + user + "/" + repo + "/archive/refs/heads/main.zip";
+  }
+
+  function copyFallback(text, done) {
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(ta); done(ok);
+  }
+  function copyText(text, btn, okLabel, failLabel) {
+    var finish = function (ok) {
+      btn.textContent = ok ? okLabel : failLabel;
+      setTimeout(function () { btn.textContent = "Copy"; }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { finish(true); },
+        function () { copyFallback(text, finish); }
+      );
+    } else { copyFallback(text, finish); }
+  }
+
+  var modal      = document.getElementById("preview-modal");
+  var modalCode  = document.getElementById("modal-code");
+  var modalTitle = document.getElementById("modal-title");
+  var modalCopy  = document.getElementById("modal-copy");
+  var modalClose = document.getElementById("modal-close");
+  function openModal() { modal.hidden = false; document.body.style.overflow = "hidden"; }
+  function closeModal() { modal.hidden = true;  document.body.style.overflow = ""; }
+  function loadScript(name) {
+    modalTitle.textContent = "scripts/" + name;
+    modalCode.textContent = "loading…"; openModal();
+    fetch("scripts/" + name, { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+      .then(function (text) { modalCode.textContent = text; })
+      .catch(function (err) {
+        modalCode.textContent =
+          "failed to load scripts/" + name + "\n\n" + err.message +
+          "\n\nIf you are viewing this offline (file://), fetch() is disabled " +
+          "by the browser. Serve the directory over HTTP, e.g.:\n" +
+          "  python3 -m http.server 8000\n" +
+          "then open http://localhost:8000/";
+      });
+  }
+  document.querySelectorAll(".previewbtn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var name = btn.getAttribute("data-script") || "";
+      if (name) loadScript(name);
+    });
+  });
+  modalClose.addEventListener("click", closeModal);
+  modal.addEventListener("click", function (e) {
+    if (e.target && e.target.getAttribute && e.target.getAttribute("data-close") === "1") closeModal();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !modal.hidden) closeModal();
+  });
+  modalCopy.addEventListener("click", function () {
+    copyText(modalCode.textContent || "", modalCopy, "Copied", "Copy failed");
+  });
+
+  document.querySelectorAll("pre").forEach(function (pre) {
+    if (pre.closest && pre.closest(".modal")) return;
+    if (pre.id === "modal-pre") return;
+    var wrap = document.createElement("div"); wrap.className = "codeblock";
+    var bar = document.createElement("div"); bar.className = "codebar";
+    var btn = document.createElement("button"); btn.type = "button";
+    btn.className = "copybtn"; btn.textContent = "Copy";
+    btn.addEventListener("click", function () {
+      copyText(pre.innerText, btn, "Copied", "Copy failed");
+    });
+    bar.appendChild(btn);
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(bar); wrap.appendChild(pre);
+  });
+
+  window.toggleStep = function (head) {
+    var body = head.nextElementSibling;
+    if (body) body.hidden = !body.hidden;
+  };
+  window.nextStep = function (btn) {
+    var step = btn.closest(".step");
+    if (step) { step.classList.add("done"); var b = step.querySelector(".step-body"); if (b) b.hidden = true; }
+    var all = Array.from(document.querySelectorAll(".step"));
+    var idx = all.indexOf(step);
+    if (idx >= 0 && idx < all.length - 1) {
+      var next = all[idx + 1];
+      next.classList.add("active");
+      var nb = next.querySelector(".step-body"); if (nb) nb.hidden = false;
+      next.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
+  window.resetAll = function () {
+    document.querySelectorAll(".step").forEach(function (s) {
+      s.classList.remove("done", "active");
+      var b = s.querySelector(".step-body"); if (b) b.hidden = true;
+    });
+    var first = document.querySelector(".step");
+    if (first) {
+      first.classList.add("active");
+      var b = first.querySelector(".step-body"); if (b) b.hidden = false;
+    }
+  };
+  resetAll();
+})();
+</script>
+</body></html>
